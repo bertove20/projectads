@@ -1,0 +1,18 @@
+# Mode "Nginx di depan": dipakai bila VPS sudah menjalankan Nginx untuk situs lain.
+#   docker compose -f compose.yaml -f compose.nginx.yaml --env-file .env up -d --build
+# - Caddy tidak dijalankan; Nginx host meneruskan admin/trk/pb ke layanan di 127.0.0.1.
+# - Layanan hanya mendengarkan di loopback — tidak terbuka langsung ke internet.
+# - Domain tracking kustom (on-demand TLS) BELUM otomatis di mode ini; lihat infra/nginx/README.md.
+
+services:
+  reverse-proxy:
+    profiles: ["caddy"]
+
+  api:
+    ports: ["127.0.0.1:4000:4000"]
+
+  tracker:
+    ports: ["127.0.0.1:4100:4100"]
+
+  dashboard:
+    ports: ["127.0.0.1:3000:3000"]
