@@ -671,11 +671,14 @@ async function main() {
   const defBoard = allBoards.find((b) => b.isDefault);
   check('board default organisasi ada', !!defBoard, allBoards.map((b) => b.name));
   const defCards = (await admin.get(`/boards/${defBoard?.id}`)).body?.cards ?? [];
-  const inc = defCards.find((c) => c.alertId === reconAlert?.id);
+  const incs = defCards.filter((c) => c.source === 'ALERT' && c.campaign?.id === camp2.body.id);
+  const inc = incs[0];
   check('alert HIGH (selisih rekonsiliasi) menjadi incident card', inc?.source === 'ALERT' && inc?.priority === 'HIGH' && inc?.campaign?.id === camp2.body.id, inc);
   const bDef = (await buyer.get(`/boards/${defBoard?.id}`)).body?.cards ?? [];
-  check('incident card campaign di luar cakupan tidak terlihat Media Buyer', !bDef.some((c) => c.alertId === reconAlert?.id));
-  check('incident card tidak terduplikasi walau alert berulang', defCards.filter((c) => c.alertId === reconAlert?.id).length === 1);
+  check('incident card campaign di luar cakupan tidak terlihat Media Buyer', !bDef.some((c) => c.campaign?.id === camp2.body.id));
+  check('alert harian untuk campaign yang sama digabung ke satu incident card', incs.length === 1, incs.map((c) => c.number));
+  const incDetail = (await admin.get(`/cards/${inc?.id}`)).body;
+  check('incident card di-assign ke Tracking Specialist & mencatat alert berulang', incDetail?.owner?.id === meMember?.id || incDetail?.activities?.some((a) => a.type === 'alert_repeated'), { owner: incDetail?.owner, acts: incDetail?.activities?.map((a) => a.type) });
 
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;

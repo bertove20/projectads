@@ -231,6 +231,21 @@ export class TasksService {
         }
         return { card, created: false };
       }
+      // Alert berkunci per tanggal/jam (mis. selisih rekonsiliasi harian) untuk jenis & entitas yang sama
+      // digabung ke incident card yang masih terbuka, agar board tidak dibanjiri kartu kembar.
+      if (alert.entityId) {
+        const open = await tx.taskCard.findFirst({
+          where: { organizationId: alert.organizationId, source: 'ALERT', completedAt: null, archivedAt: null, alert: { type: alert.type, entityType: alert.entityType, entityId: alert.entityId } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (open) {
+          await this.activity(tx, open.id, null, 'alert_repeated', { title: alert.title, severity: alert.severity });
+          if (priorityForSeverity(alert.severity) === 'URGENT' && open.priority !== 'URGENT') {
+            await tx.taskCard.update({ where: { id: open.id }, data: { priority: 'URGENT', version: { increment: 1 } } });
+          }
+          return { card: open, created: false };
+        }
+      }
       const board = await this.defaultBoard(tx, alert.organizationId);
       // Entitas alert bisa saja sudah dihapus — tautkan hanya bila masih ada.
       const campaignId = alert.entityType === 'campaign' && alert.entityId && (await tx.campaign.count({ where: { id: alert.entityId, organizationId: alert.organizationId } })) ? alert.entityId : null;
