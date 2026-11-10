@@ -1,6 +1,19 @@
 # EAIP — Enterprise Ads Intelligence Platform
 
-Spesifikasi lengkap: [read.md](read.md). Roadmap: read.md bagian 17.6.
+Spesifikasi lengkap: [read.md](read.md). Roadmap: read.md bagian 17.6. Riwayat perubahan: [CHANGELOG.md](CHANGELOG.md).
+
+## Alur kerja git
+
+| Branch | Isi |
+|---|---|
+| `main` | Versi stabil yang siap di-deploy ke VPS |
+| `develop` | Pekerjaan berjalan; setiap perbaikan/fitur = satu commit |
+
+- Pesan commit memakai format `jenis(area): ringkasan` — `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
+- Sebelum commit: `npm test --workspace apps/api`, `npx tsc --noEmit` di `apps/dashboard`, dan bila API berubah jalankan `node apps/api/test/smoke.e2e.mjs` terhadap stack lokal.
+- Catat perubahan yang terlihat pengguna di CHANGELOG.md bagian *Unreleased*.
+- Gabungkan `develop` → `main` saat satu fase selesai dan semua pengujian lulus.
+- Jangan pernah meng-commit `infra/.env`, `infra/.env.local`, atau token apa pun.
 
 ## Status Phase 1
 

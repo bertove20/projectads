@@ -1,0 +1,30 @@
+# Changelog
+
+Format: tanggal (UTC) · jenis perubahan. Riwayat lengkap ada di `git log`.
+Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md).
+
+## [Unreleased] — branch `develop`
+
+### Diperbaiki
+- **RBAC**: anggota dengan cakupan terbatas tidak lagi melihat/menutup alert campaign di luar cakupannya, dan tidak melihat campaign RollerAds yang belum dipetakan.
+- **Dashboard**: filter tanggal ("Hari ini", "7 hari", …) memakai zona waktu organisasi, sama dengan server.
+
+## 2026-11-11 — Baseline (`main`, commit a4d383e)
+
+Commit awal repository; mencakup pekerjaan sebelum repository dibuat.
+
+### Ditambahkan
+- Spesifikasi lengkap (read.md bagian 1–21), termasuk addendum kekurangan, gabungan prompt V2, integrasi RollerAds terverifikasi, dan design system V3.
+- **Phase 1**: autentikasi + MFA, RBAC & isolasi tenant, website/landing/offer/affiliate/akun jaringan/campaign, click redirect & bot filter, postback masuk & keluar, laporan ROI, spend manual, audit log, dashboard Next.js, Docker Compose + Caddy, backup/restore.
+- **Phase 2**: token API RollerAds, sinkronisasi statistik per zone, rekonsiliasi, analisis & blacklist zone, alert + Telegram.
+- **Design refresh** (Phase 3.5 dimajukan): token warna/tipografi, P&L line, tabel padat, dark mode — lihat docs/design-system.md.
+- Skill desain terpasang manual setelah review (docs/design-skills.md).
+
+### Diperbaiki sebelum baseline (ditemukan oleh pengujian)
+- Kebocoran akses: campaign yang tidak di-assign bisa dibuka lewat URL langsung.
+- Postback keluar gagal di Node 22 (lookup DNS mode `all`).
+- Tracker gagal start saat database mati.
+- File hilang dari hasil build (incremental build + deleteOutDir).
+- Endpoint daftar (konversi, postback, klik) menolak parameter `limit`.
+- Spend manual + API pada hari yang sama terhitung dobel.
+- Lebar dropdown/filter menimpa lebar yang diminta halaman.
