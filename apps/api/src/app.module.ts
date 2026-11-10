@@ -8,6 +8,7 @@ import { SessionService } from './auth/session.service';
 import { AffiliatesController } from './catalog/affiliates.controller';
 import { CampaignsController } from './catalog/campaigns.controller';
 import { NetworksController } from './catalog/networks.controller';
+import { RoutesController } from './catalog/routes.controller';
 import { WebsitesController } from './catalog/websites.controller';
 import { CoreModule, REDIS } from './common/core.module';
 import { loggerModule } from './common/logger';
@@ -37,6 +38,7 @@ import { ReportsController } from './reports/reports.controller';
     AffiliatesController,
     NetworksController,
     CampaignsController,
+    RoutesController,
     ReportsController,
     IntegrationController,
     NetworkReportsController,

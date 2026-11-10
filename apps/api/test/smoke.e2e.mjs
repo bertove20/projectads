@@ -324,6 +324,79 @@ async function main() {
   const back = await buyer.post(`/alerts/${reconAlert?.id}/resolve`);
   check('Media Buyer tidak bisa menutup alert campaign di luar cakupannya (404)', back.status === 404, back);
 
+  // ───────────────────────────── Phase 3 ─────────────────────────────
+  console.log('\n[17] Phase 3 — rotasi & split test');
+  admin.org = orgA;
+  const offerB = await admin.post('/offers', { name: `Offer B ${RUN}`, url: 'https://offer-b.example.com/go?sub={click_id}', affiliateNetworkId: aff.body.id, payoutAmount: '3', currency: 'USD' });
+  const lander = await admin.post('/landing-pages', { name: `Lander ${RUN}`, url: 'https://lp.example.com/promo' });
+  check('offer B & landing page dibuat', offerB.status === 201 && lander.status === 201, { offerB: offerB.status, lander: lander.status });
+  const badRoutes = await admin.put(`/campaigns/${camp.body.id}/routes`, { routes: [{ name: 'x', conditions: { countries: ['IDN'] }, variants: [{ label: 'A', offerId: offer.body.id, weight: 1 }] }] });
+  check('kondisi tidak valid ditolak', badRoutes.status === 400 && badRoutes.body?.error?.code === 'BAD_CONDITIONS', badRoutes);
+  const zeroW = await admin.put(`/campaigns/${camp.body.id}/routes`, { routes: [{ name: 'x', variants: [{ label: 'A', offerId: offer.body.id, weight: 0 }] }] });
+  check('route tanpa varian berbobot ditolak', zeroW.status === 400 && zeroW.body?.error?.code === 'NO_WEIGHT', zeroW);
+  const routesRes = await admin.put(`/campaigns/${camp.body.id}/routes`, {
+    routes: [
+      {
+        name: 'Indonesia mobile',
+        conditions: { countries: ['id'], devices: ['mobile'] },
+        variants: [
+          { label: 'A', offerId: offer.body.id, weight: 50 },
+          { label: 'B', offerId: offerB.body.id, weight: 50 },
+        ],
+      },
+      { name: 'Lainnya', conditions: {}, variants: [{ label: 'Landing', offerId: offerB.body.id, landingPageId: lander.body.id, weight: 1 }] },
+    ],
+  });
+  check('konfigurasi routing disimpan (2 route)', routesRes.status === 200 && routesRes.body.length === 2 && routesRes.body[0].variants.length === 2, routesRes);
+  await sleep(31_000); // cache campaign di tracker = 30 detik
+
+  // Tiap klik uji dari IP berbeda (X-Forwarded-For; lokal tanpa Caddy) agar tidak dianggap "rapid repeat" oleh bot filter
+  let ipSeq = 10;
+  const trk = async (qs, cookie) => {
+    const ip = `198.51.100.${ipSeq++}`;
+    const r = await fetch(`${TRK}/c/${token}?${qs}`, { redirect: 'manual', headers: { 'user-agent': BROWSER_UA, 'accept-language': 'id-ID,id;q=0.9', 'x-forwarded-for': ip, ...(cookie ? { cookie } : {}) } });
+    const setCookies = r.headers.getSetCookie?.() ?? [];
+    const vc = setCookies.find((c) => c.startsWith('eaip_v_'));
+    return { location: r.headers.get('location') ?? '', variantCookie: vc ? vc.split(';')[0] : null };
+  };
+  const seen = new Set();
+  let firstCookie = null;
+  let firstDest = null;
+  for (let i = 0; i < 20; i++) {
+    const r = await trk(`click_id=RT-${RUN}-${i}&zone_id=6001&country=ID`);
+    seen.add(new URL(r.location).host);
+    if (i === 0) {
+      firstCookie = r.variantCookie;
+      firstDest = new URL(r.location).host;
+    }
+  }
+  check('traffic ID+mobile dibagi ke dua offer (A/B)', seen.has('offer.example.com') && seen.has('offer-b.example.com'), [...seen]);
+  check('cookie sticky varian di-set', !!firstCookie, firstCookie);
+  const stickyHosts = new Set();
+  for (let i = 0; i < 8; i++) stickyHosts.add(new URL((await trk(`click_id=ST-${RUN}-${i}&country=ID`, firstCookie)).location).host);
+  check('pengunjung dengan cookie yang sama selalu ke varian yang sama', stickyHosts.size === 1 && stickyHosts.has(firstDest), [...stickyHosts]);
+  const my = await trk(`click_id=MY-${RUN}&country=MY`);
+  check('negara lain → route "Lainnya" (landing page + cid)', my.location.startsWith('https://lp.example.com/promo?cid='), my.location);
+  const unknownCountry = await trk(`click_id=NC-${RUN}`);
+  check('negara tidak diketahui tidak cocok dengan route ID → route "Lainnya"', unknownCountry.location.startsWith('https://lp.example.com/promo?cid='), unknownCountry.location);
+
+  // Konversi pada salah satu klik varian
+  const routedClick = new URL((await trk(`click_id=CV-${RUN}&country=ID`)).location).searchParams.get('sub');
+  const pbRouted = await fetch(pbUrl({ click_id: routedClick, payout: '3', txid: `RT-${RUN}`, status: 'approved' })).then((r) => r.json());
+  check('postback untuk klik hasil rotasi diterima', pbRouted.status === 'accepted', pbRouted);
+  const split = await admin.get(`/campaigns/${camp.body.id}/split-test?days=7`);
+  const r1 = split.body?.routes?.[0];
+  const totalClicks = r1?.variants?.reduce((s, v) => s + v.clicks, 0);
+  const totalConv = r1?.variants?.reduce((s, v) => s + v.conversions, 0);
+  check('laporan split test: klik & konversi per varian', split.status === 200 && totalClicks === 29 && totalConv === 1, r1?.variants?.map((v) => ({ l: v.label, c: v.clicks, bot: v.botClicks, cv: v.conversions })));
+  check('split test: data belum cukup → tidak ada pemenang', r1?.variants?.[1]?.verdict === 'insufficient_data' && r1?.variants?.[0]?.verdict === 'control', r1?.variants?.map((v) => v.verdict));
+  check('split test: pembagian traffic 50/50', Math.abs((r1?.variants?.[0]?.trafficShare ?? 0) - 0.5) < 1e-9, r1?.variants?.map((v) => v.trafficShare));
+  const bRoutes = await buyer.get(`/campaigns/${camp2.body.id}/routes`);
+  check('Media Buyer tidak bisa melihat routing campaign di luar cakupannya', bRoutes.status === 403, bRoutes.status);
+  // Kembalikan campaign ke tujuan default agar skenario lain tidak terpengaruh
+  const cleared = await admin.put(`/campaigns/${camp.body.id}/routes`, { routes: [] });
+  check('routing dapat dikosongkan (kembali ke tujuan default)', cleared.status === 200 && cleared.body.length === 0, cleared);
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;

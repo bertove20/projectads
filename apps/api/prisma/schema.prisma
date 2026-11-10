@@ -47,6 +47,7 @@ model Organization {
   zoneLists          ZoneListEntry[]
   alerts             Alert[]
   channels           NotificationChannel[]
+  events             TrackingEvent[]
 
   @@map("organizations")
 }
@@ -198,12 +199,19 @@ model Website {
   organizationId String       @map("organization_id") @db.Uuid
   name           String
   domain         String
+  /// Kunci publik JS SDK (bukan rahasia; keamanan dari allowlist domain)
+  sdkKey         String?      @unique @map("sdk_key")
+  /// Domain tambahan yang boleh mengirim event (selain domain utama & subdomainnya)
+  extraDomains   String[]     @default([]) @map("extra_domains")
+  /// Wajib consent sebelum SDK mengirim event (mis. trafik EU/EEA)
+  requireConsent Boolean      @default(false) @map("require_consent")
   status         ActiveStatus @default(ACTIVE)
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   landingPages LandingPage[]
+  events       TrackingEvent[]
 
   @@unique([organizationId, domain])
   @@map("websites")
@@ -225,10 +233,11 @@ model LandingPage {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  website      Website?     @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  website      Website?       @relation(fields: [websiteId], references: [id], onDelete: SetNull)
   campaigns    Campaign[]
   clicks       Click[]
+  variants     RouteVariant[]
 
   @@index([organizationId])
   @@map("landing_pages")
@@ -279,6 +288,7 @@ model Offer {
   campaigns        Campaign[]
   clicks           Click[]
   conversions      Conversion[]
+  variants         RouteVariant[]
 
   @@index([organizationId])
   @@map("offers")
@@ -430,6 +440,7 @@ model Campaign {
   conversions    Conversion[]
   spendEntries   SpendEntry[]
   zoneLists      ZoneListEntry[]
+  routes         CampaignRoute[]
 
   @@index([organizationId, status])
   @@map("campaigns")
@@ -464,6 +475,11 @@ model Click {
   isBot           Boolean   @default(false) @map("is_bot")
   botReasons      String[]  @default([]) @map("bot_reasons")
   clickOutAt      DateTime? @map("click_out_at")
+  /// Route & varian rotasi yang dipilih (Phase 3, read.md 17.3)
+  routeId         String?   @map("route_id") @db.Uuid
+  variantId       String?   @map("variant_id") @db.Uuid
+  /// Bahasa utama browser (dari Accept-Language), mis. "id"
+  language        String?   @db.VarChar(8)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -475,6 +491,7 @@ model Click {
   @@index([campaignId, createdAt])
   @@index([campaignId, ipHash, createdAt])
   @@index([campaignId, zoneId])
+  @@index([variantId])
   @@map("clicks")
 }
 
@@ -832,4 +849,88 @@ model NotificationDelivery {
 
   @@unique([alertId, channelId])
   @@map("notification_deliveries")
+}
+
+// ───────────────────────────── Phase 3: rotasi & split test ─────────────────────────────
+
+/// Aturan routing campaign. Dievaluasi berurutan (priority kecil dulu); route pertama yang cocok dipakai.
+/// Kondisi kosong = cocok untuk semua. Semua pengunjung yang cocok dengan route yang sama
+/// menerima pembagian varian yang sama — tidak ada cloaking (read.md 17.3).
+model CampaignRoute {
+  id         String   @id @default(uuid()) @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  name       String
+  priority   Int      @default(0)
+  enabled    Boolean  @default(true)
+  /// { countries?: string[], devices?: string[], os?: string[], browsers?: string[], languages?: string[] }
+  conditions Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  variants RouteVariant[]
+
+  @@index([campaignId, priority])
+  @@map("campaign_routes")
+}
+
+/// Varian dalam satu route: kombinasi offer (+ landing page opsional) dengan bobot traffic.
+model RouteVariant {
+  id            String   @id @default(uuid()) @db.Uuid
+  routeId       String   @map("route_id") @db.Uuid
+  label         String
+  offerId       String   @map("offer_id") @db.Uuid
+  landingPageId String?  @map("landing_page_id") @db.Uuid
+  weight        Int      @default(1)
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  route       CampaignRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  offer       Offer         @relation(fields: [offerId], references: [id])
+  landingPage LandingPage?  @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+
+  @@index([routeId])
+  @@map("route_variants")
+}
+
+// ───────────────────────────── Phase 3: event JS SDK ─────────────────────────────
+
+enum TrackingEventType {
+  PAGE_VIEW
+  LANDING_VIEW
+  REGISTRATION_STARTED
+  REGISTRATION_SUBMITTED
+  REGISTRATION_SUCCESS_OBSERVED
+  CUSTOM_EVENT
+}
+
+/// Event dari browser (JS SDK). SELALU berstatus OBSERVED — tidak pernah menjadi konversi VERIFIED
+/// dan tidak pernah dikirim sebagai postback ke jaringan iklan (read.md Bagian D).
+model TrackingEvent {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  websiteId      String            @map("website_id") @db.Uuid
+  /// Click ID platform bila pengunjung datang dari tracking link
+  clickId        String?           @map("click_id") @db.Uuid
+  campaignId     String?           @map("campaign_id") @db.Uuid
+  /// ID unik dari SDK untuk deduplikasi
+  eventId        String            @map("event_id")
+  sessionId      String?           @map("session_id")
+  type           TrackingEventType
+  name           String?
+  /// Path halaman tanpa query string (minimasi data)
+  path           String?
+  occurredAt     DateTime          @map("occurred_at")
+  receivedAt     DateTime          @default(now()) @map("received_at")
+  props          Json?
+  ipHash         String?           @map("ip_hash")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  website      Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, eventId])
+  @@index([organizationId, occurredAt])
+  @@index([campaignId, type, occurredAt])
+  @@index([clickId])
+  @@map("tracking_events")
 }

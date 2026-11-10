@@ -30,18 +30,20 @@ export class TrackerController {
 
   @Get('c/:token')
   async click(@Param('token') token: string, @Req() req: Request, @Res() res: Response) {
-    const { location, clickId } = await this.clicks.handleClick({
+    const { location, clickId, variantCookie } = await this.clicks.handleClick({
       token,
       query: req.query as Record<string, unknown>,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       acceptLanguage: req.headers['accept-language'],
       referer: req.headers.referer,
+      cookies: req.cookies as Record<string, string | undefined>,
     });
     noStore(res);
-    if (clickId) {
-      res.cookie(CID_COOKIE, clickId, { httpOnly: true, secure: req.secure, sameSite: 'lax', maxAge: 30 * 86400_000, path: '/' });
-    }
+    const cookieOpts = { httpOnly: true, secure: req.secure, sameSite: 'lax' as const, maxAge: 30 * 86400_000, path: '/' };
+    if (clickId) res.cookie(CID_COOKIE, clickId, cookieOpts);
+    // Varian split test tetap sama untuk pengunjung yang sama (hasil uji tidak bias oleh kunjungan ulang)
+    if (variantCookie) res.cookie(variantCookie.name, variantCookie.value, cookieOpts);
     res.redirect(302, location);
   }
 

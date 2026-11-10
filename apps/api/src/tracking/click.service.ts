@@ -11,12 +11,16 @@ import { hostOf, withQuery } from '../common/url';
 import { ENV, Env } from '../config/env';
 import { CLICK_FIELDS, readMapping } from '../postbacks/mapping';
 import { detectBot, isBot, RAPID_REPEAT_WINDOW_SECONDS } from './bot-filter';
+import { matchRoute, normalizeConditions, pickVariant, primaryLanguage, RouteDef, VisitorContext } from './routing';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CACHE_TTL_MS = 30_000;
 const DB_WRITE_TIMEOUT_MS = 1500;
+/** Cookie sticky varian berlaku 30 hari di domain tracking. */
+export const VARIANT_COOKIE_PREFIX = 'eaip_v_';
 
-interface CampaignRoute {
+/** Data campaign yang di-cache untuk jalur klik (tanpa query DB pada setiap klik). */
+interface CampaignCache {
   id: string;
   organizationId: string;
   status: string;
@@ -29,6 +33,7 @@ interface CampaignRoute {
   landingActive: boolean;
   fallbackUrl: string | null;
   mapping: Record<keyof typeof CLICK_FIELDS, string>;
+  routes: RouteDef[];
 }
 
 export interface ClickRequest {
@@ -38,11 +43,15 @@ export interface ClickRequest {
   userAgent: string | undefined;
   acceptLanguage: string | undefined;
   referer: string | undefined;
+  /** Cookie tracker milik pengunjung (untuk varian sticky) */
+  cookies?: Record<string, string | undefined>;
 }
 
 export interface ClickResult {
   location: string;
   clickId: string | null;
+  /** Cookie sticky varian yang perlu di-set */
+  variantCookie?: { name: string; value: string };
 }
 
 function str(v: unknown, max = 200): string | undefined {
@@ -51,10 +60,18 @@ function str(v: unknown, max = 200): string | undefined {
   return t ? t.slice(0, max) : undefined;
 }
 
+function safeConditions(raw: unknown) {
+  try {
+    return normalizeConditions(raw);
+  } catch {
+    return { countries: ['__invalid__'] }; // data rusak → route tidak pernah cocok
+  }
+}
+
 @Injectable()
 export class ClickService {
   private readonly logger = new Logger(ClickService.name);
-  private readonly cache = new Map<string, { at: number; route: CampaignRoute | null }>();
+  private readonly cache = new Map<string, { at: number; campaign: CampaignCache | null }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -63,18 +80,27 @@ export class ClickService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  private async route(token: string): Promise<CampaignRoute | null> {
+  private async load(token: string): Promise<CampaignCache | null> {
     const hit = this.cache.get(token);
-    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.route;
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.campaign;
     const c = await this.prisma.campaign.findUnique({
       where: { token },
       include: {
         offer: { select: { url: true, status: true } },
         landingPage: { select: { url: true, status: true } },
         networkAccount: { select: { paramMapping: true } },
+        routes: {
+          orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            variants: {
+              orderBy: { createdAt: 'asc' },
+              include: { offer: { select: { url: true, status: true } }, landingPage: { select: { url: true, status: true } } },
+            },
+          },
+        },
       },
     });
-    const route: CampaignRoute | null = c
+    const campaign: CampaignCache | null = c
       ? {
           id: c.id,
           organizationId: c.organizationId,
@@ -88,11 +114,27 @@ export class ClickService {
           landingActive: c.landingPage?.status === 'ACTIVE',
           fallbackUrl: c.fallbackUrl,
           mapping: readMapping(c.networkAccount.paramMapping, CLICK_FIELDS),
+          routes: c.routes.map((r) => ({
+            id: r.id,
+            enabled: r.enabled,
+            conditions: safeConditions(r.conditions),
+            variants: r.variants.map((v) => ({
+              id: v.id,
+              weight: v.weight,
+              enabled: v.enabled,
+              offerId: v.offerId,
+              offerUrl: v.offer.url,
+              offerActive: v.offer.status === 'ACTIVE',
+              landingPageId: v.landingPageId,
+              landingUrl: v.landingPage?.url ?? null,
+              landingActive: v.landingPage?.status === 'ACTIVE',
+            })),
+          })),
         }
       : null;
     if (this.cache.size > 5000) this.cache.clear();
-    this.cache.set(token, { at: Date.now(), route });
-    return route;
+    this.cache.set(token, { at: Date.now(), campaign });
+    return campaign;
   }
 
   /**
@@ -100,27 +142,66 @@ export class ClickService {
    * bila terjadi kegagalan, pengunjung tetap diarahkan ke fallback.
    */
   async handleClick(req: ClickRequest): Promise<ClickResult> {
-    let route: CampaignRoute | null = null;
+    let campaign: CampaignCache | null = null;
     try {
-      route = /^[A-Za-z0-9_-]{6,32}$/.test(req.token) ? await this.route(req.token) : null;
+      campaign = /^[A-Za-z0-9_-]{6,32}$/.test(req.token) ? await this.load(req.token) : null;
     } catch (err) {
       this.logger.error({ err }, 'Gagal membaca campaign; redirect ke fallback');
       return { location: this.env.DEFAULT_FALLBACK_URL, clickId: null };
     }
-    const fallback = route?.fallbackUrl ?? this.env.DEFAULT_FALLBACK_URL;
-    if (!route || route.status !== 'ACTIVE' || !route.offerUrl || !route.offerActive) {
-      return { location: fallback, clickId: null };
+    const fallback = campaign?.fallbackUrl ?? this.env.DEFAULT_FALLBACK_URL;
+    if (!campaign || campaign.status !== 'ACTIVE') return { location: fallback, clickId: null };
+
+    const q = req.query;
+    const m = campaign.mapping;
+    const ua = new UAParser(req.userAgent ?? '').getResult();
+    const countryRaw = str(q[m.country], 2)?.toUpperCase();
+    const country = countryRaw && /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : null;
+    const visitor: VisitorContext = {
+      country,
+      device: ua.device.type ?? 'desktop',
+      os: ua.os.name ?? null,
+      browser: ua.browser.name ?? null,
+      language: primaryLanguage(req.acceptLanguage),
+    };
+
+    // 1) Route yang cocok → varian berbobot (sticky); 2) bila tidak ada, tujuan default campaign.
+    let offerId: string | null;
+    let offerUrl: string;
+    let landingPageId: string | null = null;
+    let landingUrl: string | null = null;
+    let routeId: string | null = null;
+    let variantId: string | null = null;
+    let variantCookie: ClickResult['variantCookie'];
+
+    const route = matchRoute(campaign.routes, visitor);
+    if (route) {
+      const cookieName = `${VARIANT_COOKIE_PREFIX}${route.id.replace(/-/g, '').slice(0, 16)}`;
+      const variant = pickVariant(route, Math.random(), req.cookies?.[cookieName]);
+      if (!variant) return { location: fallback, clickId: null };
+      routeId = route.id;
+      variantId = variant.id;
+      offerId = variant.offerId;
+      offerUrl = variant.offerUrl;
+      if (variant.landingPageId && variant.landingUrl) {
+        landingPageId = variant.landingPageId;
+        landingUrl = variant.landingUrl;
+      }
+      if (req.cookies?.[cookieName] !== variant.id) variantCookie = { name: cookieName, value: variant.id };
+    } else {
+      if (!campaign.offerUrl || !campaign.offerActive) return { location: fallback, clickId: null };
+      offerId = campaign.offerId;
+      offerUrl = campaign.offerUrl;
+      if (campaign.flowType === 'LANDING' && campaign.landingUrl && campaign.landingActive) {
+        landingPageId = campaign.landingPageId;
+        landingUrl = campaign.landingUrl;
+      }
     }
-    const useLanding = route.flowType === 'LANDING' && route.landingUrl && route.landingActive;
 
     const clickId = uuidv7();
-    const q = req.query;
-    const m = route.mapping;
     const ipHash = this.crypto.hashIp(req.ip);
-    const ua = new UAParser(req.userAgent ?? '').getResult();
     const costRaw = str(q[m.cost], 32);
     const cost = costRaw && /^\d{1,9}(\.\d{1,9})?$/.test(costRaw) ? costRaw : undefined;
-    const countryRaw = str(q[m.country], 2)?.toUpperCase();
 
     const known = new Set<string>(Object.values(m));
     const extra: Record<string, string> = {};
@@ -131,7 +212,7 @@ export class ClickService {
     let recent = 0;
     if (ipHash) {
       try {
-        const key = `rl:click:${route.id}:${ipHash}`;
+        const key = `rl:click:${campaign.id}:${ipHash}`;
         recent = await this.redis.incr(key);
         if (recent === 1) await this.redis.expire(key, RAPID_REPEAT_WINDOW_SECONDS);
         recent -= 1; // jumlah klik SEBELUM klik ini
@@ -143,20 +224,23 @@ export class ClickService {
 
     const data: Prisma.ClickCreateManyInput = {
       id: clickId,
-      organizationId: route.organizationId,
-      campaignId: route.id,
-      offerId: route.offerId,
-      landingPageId: useLanding ? route.landingPageId : null,
+      organizationId: campaign.organizationId,
+      campaignId: campaign.id,
+      offerId,
+      landingPageId,
+      routeId,
+      variantId,
+      language: visitor.language,
       externalClickId: str(q[m.externalClickId], 255),
       zoneId: str(q[m.zoneId], 100),
       subId: str(q[m.subId], 255),
       creativeId: str(q[m.creativeId], 100),
       feedId: str(q[m.feedId], 100),
       cost,
-      country: countryRaw && /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : null,
-      deviceType: ua.device.type ?? 'desktop',
-      os: ua.os.name?.slice(0, 50) ?? null,
-      browser: ua.browser.name?.slice(0, 50) ?? null,
+      country,
+      deviceType: visitor.device,
+      os: visitor.os?.slice(0, 50) ?? null,
+      browser: visitor.browser?.slice(0, 50) ?? null,
       ipHash,
       referrerDomain: req.referer ? hostOf(req.referer)?.slice(0, 255) ?? null : null,
       extraParams: Object.keys(extra).length ? extra : undefined,
@@ -166,10 +250,8 @@ export class ClickService {
 
     await this.persist(data);
 
-    const location = useLanding
-      ? withQuery(route.landingUrl!, { cid: clickId })
-      : route.offerUrl.replaceAll('{click_id}', encodeURIComponent(clickId));
-    return { location, clickId };
+    const location = landingUrl ? withQuery(landingUrl, { cid: clickId }) : offerUrl.replaceAll('{click_id}', encodeURIComponent(clickId));
+    return { location, clickId, variantCookie };
   }
 
   /** Tulis ke PostgreSQL; bila gagal/lambat, simpan ke buffer Redis untuk ditulis ulang oleh worker. */
