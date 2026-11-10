@@ -27,6 +27,14 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     ],
   },
   {
+    section: 'Kerja',
+    items: [
+      { href: '/tasks', label: 'Tugas saya', permission: 'tasks.read' },
+      { href: '/boards', label: 'Board', permission: 'tasks.read' },
+      { href: '/teams', label: 'Tim kerja', permission: 'tasks.read' },
+    ],
+  },
+  {
     section: 'Iklan',
     items: [
       { href: '/campaigns', label: 'Campaigns', permission: 'campaigns.read' },

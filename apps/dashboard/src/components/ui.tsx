@@ -215,7 +215,7 @@ export function CopyText({ value }: { value: string }) {
 }
 
 /** Panel samping untuk form & detail. Esc menutup. */
-export function Drawer({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+export function Drawer({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -226,7 +226,7 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="Tutup" className="absolute inset-0 bg-black/35" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-lg flex-col border-l border-border bg-surface">
+      <div className={cn('relative flex h-full w-full flex-col border-l border-border bg-surface', wide ? 'max-w-3xl' : 'max-w-lg')}>
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
           <h2 className="text-[15px] font-semibold">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>

@@ -5,6 +5,15 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 
 ## [Unreleased] — branch `develop`
 
+### Ditambahkan (Phase 4 — Tim & Kanban)
+- **Tim & jabatan**: 8 jabatan kerja (terpisah dari role hak akses), tim dengan ketua & anggota, halaman "Tim kerja".
+- **Board Kanban**: 7 kolom default + kolom custom dengan batas WIP, drag & drop (mouse, sentuh, keyboard), tampilan board & daftar, filter (orang, prioritas, campaign, lewat tenggat), pengaturan kolom.
+- **Kartu tugas**: nomor T-n, prioritas, owner, kolaborator, campaign/akun jaringan, jadwal, checklist, komentar dengan @mention, dependensi (anti siklus), tautan, catatan waktu, timeline aktivitas.
+- **Aturan kerja**: Done wajib bukti penyelesaian dan dependensi selesai; kartu "wajib approval" hanya bisa diselesaikan Owner/Team Leader (`tasks.approve`); anggota cakupan ASSIGNED hanya melihat kartu campaign miliknya atau yang ia pegang/ikuti.
+- **Real-time**: perubahan board tampil di semua sesi tanpa reload (SSE + Redis pub/sub); pemindahan kartu atomik dengan versi (bentrok → 409).
+- **Incident card otomatis**: alert HIGH/CRITICAL menjadi kartu di board default, di-assign ke Tracking Specialist; alert serupa berulang digabung ke kartu yang sama.
+- **Tugas saya**: kartu milik/diikuti dikelompokkan per tenggat + daftar mention.
+
 ### Ditambahkan
 - **Pemisahan domain per fungsi**: admin (dashboard), tracking (klik/SDK), postback (affiliate) — Caddy hanya membuka endpoint sesuai fungsi tiap domain; URL postback affiliate memakai `POSTBACK_PUBLIC_URL`.
 - **Manajemen domain tracking kustom**: tambah domain, instruksi DNS, verifikasi CNAME/A record, HTTPS on-demand (hanya domain aktif), pilih domain per campaign, snippet SDK first-party per website, verifikasi ulang tiap 6 jam + alert.
