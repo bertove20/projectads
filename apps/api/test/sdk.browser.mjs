@@ -49,7 +49,8 @@ await api('PATCH', `/websites/${siteB.id}`, { requireConsent: true });
 const campaigns = await api('GET', '/campaigns');
 const active = campaigns.find((c) => c.status === 'ACTIVE' && c.flowType === 'DIRECT');
 const loc = (await page.request.get(`${TRK}/c/${active.token}?click_id=BR-${RUN}`, { maxRedirects: 0, headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126 Safari/537.36', 'accept-language': 'id' } })).headers().location;
-const cid = new URL(loc).searchParams.get('sub');
+// Tujuan bisa offer (?sub=) atau landing page hasil routing (?cid=) — keduanya membawa click ID yang sama
+const cid = new URL(loc).searchParams.get('sub') ?? new URL(loc).searchParams.get('cid');
 check('click ID didapat dari tracker', /^[0-9a-f-]{36}$/.test(cid ?? ''), loc);
 
 await new Promise((r) => setTimeout(r, 31000)); // cache website di tracker 30 detik (consent baru saja diubah)

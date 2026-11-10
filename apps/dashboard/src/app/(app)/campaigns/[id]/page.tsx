@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { FormEvent, useMemo, useState } from 'react';
 import { RangePicker } from '@/components/range-picker';
 import { ReportNotes, ReportTable } from '@/components/report-table';
+import { FunnelPanel } from '@/components/funnel-panel';
+import { RoutingPanel } from '@/components/routing-panel';
 import { ZonePanel } from '@/components/zone-panel';
 import { Alert, Badge, Button, Card, CopyText, Field, Input, Loading, PageHeader, Select, StatusBadge } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
@@ -203,6 +205,16 @@ export default function CampaignDetailPage() {
           <Loading />
         )}
       </Card>
+
+      <Card title="Routing & split test">
+        <RoutingPanel campaign={c} />
+      </Card>
+
+      {can('analytics.read') && (
+        <Card title="Funnel" actions={<span className="text-xs text-muted">rentang sama dengan Performa</span>}>
+          <FunnelPanel campaignId={c.id} from={range.from} to={range.to} />
+        </Card>
+      )}
 
       <Card title="Zone & blacklist">
         <ZonePanel campaign={c} />

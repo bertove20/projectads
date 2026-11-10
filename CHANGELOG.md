@@ -5,6 +5,12 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 
 ## [Unreleased] — branch `develop`
 
+### Ditambahkan (Phase 3)
+- **Rotasi & split test**: routing per campaign berdasarkan negara, device, OS, browser, bahasa; varian offer/landing berbobot; varian sticky per pengunjung; laporan split test (CR, interval 95%, p-value, verdict konservatif). Editor routing di halaman campaign.
+- **JS SDK**: event landing page (OBSERVED) dengan batching, antrean offline, consent, sendBeacon, link click-out otomatis; collector dengan allowlist domain, rate limit, deduplikasi, dan pembuangan PII. Panel pemasangan di halaman Websites.
+- **Funnel campaign**: klik → tahap SDK → konversi VERIFIED.
+- Uji browser sungguhan untuk SDK (`apps/api/test/sdk.browser.mjs`).
+
 ### Diperbaiki
 - **RBAC**: anggota dengan cakupan terbatas tidak lagi melihat/menutup alert campaign di luar cakupannya, dan tidak melihat campaign RollerAds yang belum dipetakan.
 - **Dashboard**: filter tanggal ("Hari ini", "7 hari", …) memakai zona waktu organisasi, sama dengan server.

@@ -2,11 +2,12 @@
 
 import { FormEvent, useState } from 'react';
 import { RequirePermission } from '@/components/app-shell';
-import { Alert, Button, Card, Drawer, Field, Input, Loading, PageHeader, Select, StatusBadge, Table, Td } from '@/components/ui';
+import { Alert, Badge, Button, Card, Drawer, Field, Input, Loading, PageHeader, Select, StatusBadge, Table, Td } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
 import { compact, useOrgAction, useOrgQuery } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
-import type { LandingPage, Website } from '@/lib/types';
+import type { LandingPage, Website, WebsiteWithSdk } from '@/lib/types';
+import { SdkSetup } from '@/components/sdk-setup';
 
 function WebsiteForm({ onDone }: { onDone: () => void }) {
   const action = useOrgAction();
@@ -67,7 +68,9 @@ function LandingForm({ websites, onDone }: { websites: Website[]; onDone: () => 
 
 export default function WebsitesPage() {
   const { can } = useSession();
-  const websites = useOrgQuery<Website[]>('/websites');
+  const websites = useOrgQuery<WebsiteWithSdk[]>('/websites');
+  const [sdkFor, setSdkFor] = useState<string | null>(null);
+  const sdkSite = websites.data?.find((w) => w.id === sdkFor) ?? null;
   const landers = useOrgQuery<LandingPage[]>('/landing-pages');
   const [open, setOpen] = useState<'website' | 'landing' | null>(null);
   const manage = can('websites.manage');
@@ -98,13 +101,19 @@ export default function WebsitesPage() {
           {websites.isLoading ? (
             <Loading />
           ) : (
-            <Table head={['Nama', 'Domain', 'Status']} empty={!websites.data?.length}>
+            <Table head={['Nama', 'Domain', 'JS SDK', 'Status', '']} empty={!websites.data?.length} emptyText="Belum ada website. Tambahkan domain landing page Anda untuk memasang JS SDK.">
               {websites.data?.map((w) => (
                 <tr key={w.id}>
                   <Td className="font-medium">{w.name}</Td>
                   <Td>{w.domain}</Td>
+                  <Td>{w.sdkKey ? <Badge tone="green">siap dipasang</Badge> : <Badge>belum</Badge>}</Td>
                   <Td>
                     <StatusBadge status={w.status} />
+                  </Td>
+                  <Td>
+                    <Button size="sm" variant="secondary" onClick={() => setSdkFor(w.id)}>
+                      Pasang SDK
+                    </Button>
                   </Td>
                 </tr>
               ))}
@@ -112,6 +121,9 @@ export default function WebsitesPage() {
           )}
         </Card>
       </div>
+      <Drawer open={!!sdkSite} title={sdkSite ? `JS SDK — ${sdkSite.name}` : ''} onClose={() => setSdkFor(null)}>
+        {sdkSite && <SdkSetup key={sdkSite.id} site={sdkSite} />}
+      </Drawer>
       <Drawer open={open === 'website'} title="Website baru" onClose={() => setOpen(null)}>
         <WebsiteForm onDone={() => setOpen(null)} />
       </Drawer>

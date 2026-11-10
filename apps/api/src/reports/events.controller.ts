@@ -18,10 +18,10 @@ function range(from?: string, to?: string) {
 
 /** Urutan tahap funnel (event OBSERVED dari JS SDK) sebelum konversi VERIFIED. */
 const FUNNEL: Array<{ key: string; type: TrackingEventType; label: string }> = [
-  { key: 'landing_view', type: 'LANDING_VIEW', label: 'Melihat landing page' },
+  { key: 'landing_view', type: 'LANDING_VIEW', label: 'Lihat landing page' },
   { key: 'registration_started', type: 'REGISTRATION_STARTED', label: 'Mulai registrasi' },
   { key: 'registration_submitted', type: 'REGISTRATION_SUBMITTED', label: 'Kirim registrasi' },
-  { key: 'registration_success_observed', type: 'REGISTRATION_SUCCESS_OBSERVED', label: 'Registrasi berhasil (terlihat di browser)' },
+  { key: 'registration_success_observed', type: 'REGISTRATION_SUCCESS_OBSERVED', label: 'Registrasi berhasil' },
 ];
 
 @ApiTags('events')
@@ -85,7 +85,7 @@ export class EventsController {
     const stages = [
       { key: 'click', label: 'Klik (non-bot)', count: clicks, source: 'tracker' as const },
       ...FUNNEL.map((f) => ({ key: f.key, label: f.label, count: byType.get(f.type) ?? 0, source: 'sdk_observed' as const })),
-      { key: 'conversion_verified', label: 'Konversi VERIFIED (postback)', count: Number(convRow?.clicks ?? 0), source: 'postback_verified' as const },
+      { key: 'conversion_verified', label: 'Konversi', count: Number(convRow?.clicks ?? 0), source: 'postback_verified' as const },
     ];
     return {
       range: { from: start.toISOString(), to: end.toISOString() },

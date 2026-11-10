@@ -52,6 +52,19 @@ Spesifikasi lengkap: [read.md](read.md). Roadmap: read.md bagian 17.6. Riwayat p
 | Impor CSV spend untuk jaringan tanpa API | ⏳ belum (spend manual per hari sudah tersedia) |
 | Push blacklist/bid/status ke RollerAds | ⏳ Phase 6 (wajib approval) |
 
+## Status Phase 3
+
+| Komponen | Status |
+|---|---|
+| Routing per negara/device/OS/browser/bahasa + rotasi berbobot + varian sticky | ✅ |
+| Laporan split test (Wilson 95%, z-test, verdict konservatif) + editor routing | ✅ |
+| JS SDK (event OBSERVED, batching, offline, consent, sendBeacon, click-out) | ✅ diuji di Chromium |
+| Collector event: allowlist domain, CORS, rate limit, dedupe, pembuangan PII | ✅ |
+| Funnel campaign | ✅ |
+| Adapter Clickadu / PropellerAds / EvaDav | ⏳ menunggu verifikasi dokumentasi API resmi |
+
+Uji SDK di browser: `npx playwright install chromium` (sekali), lalu `ADMIN_MFA_SECRET=… node apps/api/test/sdk.browser.mjs` (butuh stack lokal + `npm run dev:dashboard`).
+
 ## Menjalankan stack lengkap secara lokal (Docker Desktop)
 
 ```bash

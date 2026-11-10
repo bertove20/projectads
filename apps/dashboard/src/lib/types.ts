@@ -356,3 +356,76 @@ export interface NotificationChannel {
   lastTestAt: string | null;
   createdAt: string;
 }
+
+// ───────────── Phase 3 ─────────────
+
+export interface RouteConditions {
+  countries?: string[];
+  devices?: string[];
+  os?: string[];
+  browsers?: string[];
+  languages?: string[];
+}
+
+export interface RouteVariantItem {
+  id: string;
+  label: string;
+  offerId: string;
+  landingPageId: string | null;
+  weight: number;
+  enabled: boolean;
+  offer: { id: string; name: string; status: ActiveStatus };
+  landingPage: { id: string; name: string; status: ActiveStatus } | null;
+}
+
+export interface CampaignRouteItem {
+  id: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  conditions: RouteConditions;
+  variants: RouteVariantItem[];
+}
+
+export type Verdict = 'insufficient_data' | 'no_difference' | 'better' | 'worse' | 'control';
+
+export interface SplitTestReport {
+  days: number;
+  currency: string;
+  thresholds: { minClicks: number; minConversions: number; alpha: number };
+  routes: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    variants: Array<{
+      id: string;
+      label: string;
+      enabled: boolean;
+      offer: { name: string };
+      landingPage: { name: string } | null;
+      trafficShare: number;
+      clicks: number;
+      botClicks: number;
+      conversions: number;
+      revenue: number;
+      cr: number | null;
+      crInterval: { low: number; high: number } | null;
+      epc: number | null;
+      pValue: number | null;
+      verdict: Verdict;
+    }>;
+  }>;
+}
+
+export interface FunnelReport {
+  sdkActive: boolean;
+  stages: Array<{ key: string; label: string; count: number; source: 'tracker' | 'sdk_observed' | 'postback_verified'; rateFromClick: number | null; rateFromPrevious: number | null }>;
+  notes: string[];
+}
+
+export interface WebsiteWithSdk extends Website {
+  sdkKey: string | null;
+  sdkSnippet: string | null;
+  extraDomains: string[];
+  requireConsent: boolean;
+}

@@ -200,7 +200,7 @@ export function CopyText({ value }: { value: string }) {
   }, [copied]);
   return (
     <div className="flex items-stretch overflow-hidden rounded-md border border-border-strong">
-      <code className="min-w-0 flex-1 break-all bg-surface-2 px-2.5 py-2 font-mono text-xs leading-relaxed">{value}</code>
+      <code className="min-w-0 flex-1 break-all whitespace-pre-wrap bg-surface-2 px-2.5 py-2 font-mono text-xs leading-relaxed">{value}</code>
       <button
         type="button"
         className="shrink-0 border-l border-border-strong bg-surface px-3 text-[12.5px] font-medium hover:bg-surface-2"
