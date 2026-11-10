@@ -1,0 +1,23 @@
+{
+  "name": "eaip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise Ads Intelligence Platform",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm -w apps/api run db:migrate",
+    "db:seed": "npm -w apps/api run db:seed",
+    "dev:api": "npm -w apps/api run dev:api",
+    "dev:tracker": "npm -w apps/api run dev:tracker",
+    "dev:worker": "npm -w apps/api run dev:worker",
+    "dev:dashboard": "npm -w apps/dashboard run dev"
+  }
+}

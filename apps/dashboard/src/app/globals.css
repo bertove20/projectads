@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/*
+ * EAIP design tokens — "trading desk ledger".
+ * Netral abu kehijauan yang dingin, satu aksen petrol, hijau/merah HANYA untuk untung/rugi & status.
+ * Komponen memakai token semantik ini, bukan warna hardcoded (read.md 21.4).
+ */
+:root {
+  color-scheme: light;
+  --bg: #f3f5f4;
+  --surface: #ffffff;
+  --surface-2: #eef1ef;
+  --border: #dee3e0;
+  --border-strong: #c9d0cc;
+  --text: #18201c;
+  --muted: #5e6a64;
+  --primary: #135e6e;
+  --primary-fg: #ffffff;
+  --primary-soft: rgb(19 94 110 / 0.09);
+  --success: #17804a;
+  --warning: #a35d06;
+  --danger: #c0392b;
+  --ring: #6fb3c2;
+  /* Palet chart kategorikal tervalidasi CVD (dataviz skill); slot berurutan */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --grid: #e6e9e7;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #101413;
+    --surface: #161b19;
+    --surface-2: #1d2421;
+    --border: #28302d;
+    --border-strong: #36403c;
+    --text: #e6ebe8;
+    --muted: #96a39d;
+    --primary: #5fb0c2;
+    --primary-fg: #0d1513;
+    --primary-soft: rgb(95 176 194 / 0.12);
+    --success: #3fb873;
+    --warning: #e0a23a;
+    --danger: #ef6a5a;
+    --ring: #2c6e7d;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --grid: #252c29;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101413;
+  --surface: #161b19;
+  --surface-2: #1d2421;
+  --border: #28302d;
+  --border-strong: #36403c;
+  --text: #e6ebe8;
+  --muted: #96a39d;
+  --primary: #5fb0c2;
+  --primary-fg: #0d1513;
+  --primary-soft: rgb(95 176 194 / 0.12);
+  --success: #3fb873;
+  --warning: #e0a23a;
+  --danger: #ef6a5a;
+  --ring: #2c6e7d;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --grid: #252c29;
+}
+
+@theme inline {
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-ring: var(--ring);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

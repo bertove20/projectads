@@ -1,0 +1,27 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# Dashboard + API (satu origin agar cookie session first-party)
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy dashboard:3000
+	}
+}
+
+# Domain tracking: klik, click-out, postback masuk
+{$TRACKER_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	reverse_proxy tracker:4100
+}

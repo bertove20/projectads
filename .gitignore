@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.next/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+infra/backups/
+infra/data/
+.DS_Store
+*.tsbuildinfo
+apps/dashboard/next-env.d.ts
+infra/.env.local
+test.php

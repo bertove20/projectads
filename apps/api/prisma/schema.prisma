@@ -1,0 +1,835 @@
+// Enterprise Ads Intelligence Platform — Phase 1 schema
+// Konvensi:
+// - Semua tabel bisnis memiliki organization_id (tenant isolation).
+// - Timestamp disimpan dalam UTC.
+// - Nilai uang memakai Decimal(18,6) + kode mata uang.
+// - Tabel volume tinggi (clicks, inbound_postbacks, postback_deliveries) disiapkan
+//   untuk partisi via migrasi SQL manual pada fase hardening (lihat read.md 17.9).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Core ─────────────────────────────
+
+model Organization {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique
+  timezone  String    @default("UTC")
+  currency  String    @default("USD") @db.Char(3)
+  status    OrgStatus @default(ACTIVE)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  memberships        Membership[]
+  roles              Role[]
+  websites           Website[]
+  landingPages       LandingPage[]
+  affiliateNetworks  AffiliateNetwork[]
+  offers             Offer[]
+  networkAccounts    NetworkAccount[]
+  campaigns          Campaign[]
+  clicks             Click[]
+  conversions        Conversion[]
+  inboundPostbacks   InboundPostback[]
+  postbackDeliveries PostbackDelivery[]
+  spendEntries       SpendEntry[]
+  auditLogs          AuditLog[]
+  credentials        EncryptedCredential[]
+  networkStats       NetworkStatDaily[]
+  syncRuns           SyncRun[]
+  zoneLists          ZoneListEntry[]
+  alerts             Alert[]
+  channels           NotificationChannel[]
+
+  @@map("organizations")
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  email             String     @unique
+  name              String
+  passwordHash      String     @map("password_hash")
+  isSuperAdmin      Boolean    @default(false) @map("is_super_admin")
+  status            UserStatus @default(ACTIVE)
+  mfaEnabled        Boolean    @default(false) @map("mfa_enabled")
+  mfaSecretEnc      String?    @map("mfa_secret_enc")
+  failedLogins      Int        @default(0) @map("failed_logins")
+  lockedUntil       DateTime?  @map("locked_until")
+  lastLoginAt       DateTime?  @map("last_login_at")
+  passwordChangedAt DateTime   @default(now()) @map("password_changed_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  sessions    Session[]
+  memberships Membership[]
+
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Session {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  mfaVerified Boolean   @default(false) @map("mfa_verified")
+  ip          String?
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Permission {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  description String
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+/// Role sistem (hak akses). organizationId null = role bawaan sistem untuk semua organisasi.
+/// Jabatan (Media Buyer, Fraud Analyst, dst.) dimodelkan terpisah pada Tahap B (read.md 19.1).
+model Role {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizationId String? @map("organization_id") @db.Uuid
+  key            String
+  name           String
+  description    String?
+  isSystem       Boolean @default(false) @map("is_system")
+
+  organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  memberships  Membership[]
+
+  @@unique([organizationId, key])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Membership {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  roleId         String           @map("role_id") @db.Uuid
+  /// ALL = semua resource organisasi; ASSIGNED = hanya resource pada resource_assignments
+  dataScope      DataScope        @default(ASSIGNED) @map("data_scope")
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role                 @relation(fields: [roleId], references: [id])
+  assignments  ResourceAssignment[]
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+enum DataScope {
+  ALL
+  ASSIGNED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  DISABLED
+}
+
+model ResourceAssignment {
+  id           String       @id @default(uuid()) @db.Uuid
+  membershipId String       @map("membership_id") @db.Uuid
+  resourceType ResourceType @map("resource_type")
+  resourceId   String       @map("resource_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, resourceType, resourceId])
+  @@index([resourceType, resourceId])
+  @@map("resource_assignments")
+}
+
+enum ResourceType {
+  CAMPAIGN
+  WEBSITE
+  NETWORK_ACCOUNT
+}
+
+// ───────────────────────────── Ads & offers ─────────────────────────────
+
+model Website {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  domain         String
+  status         ActiveStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  landingPages LandingPage[]
+
+  @@unique([organizationId, domain])
+  @@map("websites")
+}
+
+enum ActiveStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model LandingPage {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  websiteId      String?      @map("website_id") @db.Uuid
+  name           String
+  url            String
+  status         ActiveStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  website      Website?     @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  campaigns    Campaign[]
+  clicks       Click[]
+
+  @@index([organizationId])
+  @@map("landing_pages")
+}
+
+/// Affiliate network / advertiser: sumber offer dan pengirim postback MASUK.
+model AffiliateNetwork {
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @map("organization_id") @db.Uuid
+  name              String
+  /// SHA-256 dari token postback masuk. Token asli hanya ditampilkan sekali saat dibuat/rotasi.
+  postbackTokenHash String       @unique @map("postback_token_hash")
+  /// Daftar IP yang diizinkan mengirim postback (kosong = tidak dibatasi IP).
+  allowedIps        String[]     @default([]) @map("allowed_ips")
+  /// Pemetaan nama parameter postback masuk -> field internal.
+  paramMapping      Json         @default("{}") @map("param_mapping")
+  status            ActiveStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offers           Offer[]
+  conversions      Conversion[]
+  inboundPostbacks InboundPostback[]
+
+  @@index([organizationId])
+  @@map("affiliate_networks")
+}
+
+model Offer {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.Uuid
+  affiliateNetworkId String?      @map("affiliate_network_id") @db.Uuid
+  name               String
+  /// URL offer, wajib mengandung placeholder {click_id}
+  url                String
+  payoutType         PayoutType   @default(CPA) @map("payout_type")
+  payoutAmount       Decimal      @default(0) @map("payout_amount") @db.Decimal(18, 6)
+  currency           String       @default("USD") @db.Char(3)
+  geos               String[]     @default([])
+  category           String?
+  status             ActiveStatus @default(ACTIVE)
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  affiliateNetwork AffiliateNetwork? @relation(fields: [affiliateNetworkId], references: [id], onDelete: SetNull)
+  campaigns        Campaign[]
+  clicks           Click[]
+  conversions      Conversion[]
+
+  @@index([organizationId])
+  @@map("offers")
+}
+
+enum PayoutType {
+  CPA
+  CPL
+  CPI
+  REVSHARE
+  DYNAMIC
+}
+
+enum AdNetwork {
+  ROLLERADS
+  CLICKADU
+  PROPELLERADS
+  EVADAV
+  META
+  GOOGLE
+  OTHER
+}
+
+/// Akun jaringan iklan (traffic source). Tujuan postback KELUAR.
+model NetworkAccount {
+  id                     String       @id @default(uuid()) @db.Uuid
+  organizationId         String       @map("organization_id") @db.Uuid
+  network                AdNetwork
+  name                   String
+  /// Pemetaan nama parameter pada tracking link -> field internal (externalClickId, zoneId, dst.)
+  paramMapping           Json         @default("{}") @map("param_mapping")
+  /// Template URL postback keluar disimpan terenkripsi pada encrypted_credentials (kind=POSTBACK_TEMPLATE)
+  postbackConfigured     Boolean      @default(false) @map("postback_configured")
+  /// Regex opsional pada body respons yang menandakan provider MENERIMA konversi
+  postbackSuccessPattern String?      @map("postback_success_pattern")
+  /// Mode uji: postback tidak dikirim ke provider, hanya dicatat
+  testMode               Boolean      @default(true) @map("test_mode")
+  status                 ActiveStatus @default(ACTIVE)
+  createdAt              DateTime     @default(now()) @map("created_at")
+  updatedAt              DateTime     @updatedAt @map("updated_at")
+
+  // ── Integrasi API jaringan (Phase 2) ──
+  apiConfigured     Boolean     @default(false) @map("api_configured")
+  /// ID akun di jaringan iklan (dari /whoami)
+  externalAccountId String?     @map("external_account_id")
+  /// Zona waktu laporan jaringan (dari /whoami), dipakai untuk rekonsiliasi tanggal
+  networkTimezone   String?     @map("network_timezone")
+  networkCurrency   String?     @map("network_currency") @db.Char(3)
+  syncEnabled       Boolean     @default(true) @map("sync_enabled")
+  lastSyncAt        DateTime?   @map("last_sync_at")
+  lastSyncStatus    SyncStatus? @map("last_sync_status")
+  lastSyncError     String?     @map("last_sync_error")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaigns    Campaign[]
+  credentials  EncryptedCredential[]
+  deliveries   PostbackDelivery[]
+  stats        NetworkStatDaily[]
+  syncRuns     SyncRun[]
+  zoneLists    ZoneListEntry[]
+
+  @@index([organizationId])
+  @@map("network_accounts")
+}
+
+enum CredentialKind {
+  API_TOKEN
+  POSTBACK_TEMPLATE
+}
+
+model EncryptedCredential {
+  id               String         @id @default(uuid()) @db.Uuid
+  organizationId   String         @map("organization_id") @db.Uuid
+  networkAccountId String?        @map("network_account_id") @db.Uuid
+  kind             CredentialKind
+  /// Format: v<keyVersion>:<iv b64>:<tag b64>:<ciphertext b64> (AES-256-GCM)
+  ciphertext       String
+  /// Petunjuk aman untuk UI, mis. "…a1b2"
+  hint             String?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  rotatedAt        DateTime?      @map("rotated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount? @relation(fields: [networkAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([networkAccountId, kind])
+  @@map("encrypted_credentials")
+}
+
+enum AdFormat {
+  PUSH
+  ONCLICK
+  IN_PAGE_PUSH
+  DIRECT_CLICK
+  NATIVE
+  BANNER
+  INTERSTITIAL
+  OTHER
+}
+
+enum BidModel {
+  CPC
+  SMART_CPC
+  CPA_GOAL_CPC
+  CPM
+  SMART_CPM
+  CPA_GOAL_CPM
+  CPA
+  OTHER
+}
+
+enum FlowType {
+  /// iklan -> offer
+  DIRECT
+  /// iklan -> landing page -> click-out -> offer
+  LANDING
+}
+
+model Campaign {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.Uuid
+  networkAccountId   String       @map("network_account_id") @db.Uuid
+  name               String
+  /// Token publik pada tracking link /c/<token>
+  token              String       @unique
+  externalCampaignId String?      @map("external_campaign_id")
+  adFormat           AdFormat     @map("ad_format")
+  adFormatNetwork    String?      @map("ad_format_network")
+  bidModel           BidModel     @map("bid_model")
+  bidAmount          Decimal?     @map("bid_amount") @db.Decimal(18, 6)
+  targetCpa          Decimal?     @map("target_cpa") @db.Decimal(18, 6)
+  currency           String       @default("USD") @db.Char(3)
+  flowType           FlowType     @default(DIRECT) @map("flow_type")
+  offerId            String?      @map("offer_id") @db.Uuid
+  landingPageId      String?      @map("landing_page_id") @db.Uuid
+  fallbackUrl        String?      @map("fallback_url")
+  /// Goal konversi yang dikirim sebagai postback ke jaringan (mis. "default", "lead")
+  conversionGoal     String       @default("default") @map("conversion_goal")
+  postbackEnabled    Boolean      @default(false) @map("postback_enabled")
+  status             ActiveStatus @default(PAUSED)
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount  @relation(fields: [networkAccountId], references: [id])
+  offer          Offer?          @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  landingPage    LandingPage?    @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  clicks         Click[]
+  conversions    Conversion[]
+  spendEntries   SpendEntry[]
+  zoneLists      ZoneListEntry[]
+
+  @@index([organizationId, status])
+  @@map("campaigns")
+}
+
+// ───────────────────────────── Tracking ─────────────────────────────
+
+model Click {
+  /// UUIDv7 (urut waktu), dibuat aplikasi sebelum insert
+  id              String    @id @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  campaignId      String    @map("campaign_id") @db.Uuid
+  offerId         String?   @map("offer_id") @db.Uuid
+  landingPageId   String?   @map("landing_page_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  /// Click ID dari jaringan iklan (dipakai untuk postback keluar)
+  externalClickId String?   @map("external_click_id")
+  zoneId          String?   @map("zone_id")
+  subId           String?   @map("sub_id")
+  creativeId      String?   @map("creative_id")
+  feedId          String?   @map("feed_id")
+  /// Biaya per klik dari macro jaringan bila tersedia (estimasi)
+  cost            Decimal?  @db.Decimal(18, 6)
+  country         String?   @db.Char(2)
+  deviceType      String?   @map("device_type")
+  os              String?
+  browser         String?
+  /// HMAC-SHA256 IP; IP mentah tidak disimpan (minimasi data)
+  ipHash          String?   @map("ip_hash")
+  referrerDomain  String?   @map("referrer_domain")
+  extraParams     Json?     @map("extra_params")
+  isBot           Boolean   @default(false) @map("is_bot")
+  botReasons      String[]  @default([]) @map("bot_reasons")
+  clickOutAt      DateTime? @map("click_out_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  offer        Offer?       @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  landingPage  LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  conversions  Conversion[]
+
+  @@index([organizationId, createdAt])
+  @@index([campaignId, createdAt])
+  @@index([campaignId, ipHash, createdAt])
+  @@index([campaignId, zoneId])
+  @@map("clicks")
+}
+
+enum ConversionStatus {
+  RECEIVED
+  OBSERVED
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  REVOKED
+}
+
+enum ConversionSource {
+  INBOUND_POSTBACK
+  SDK
+  MANUAL
+}
+
+model Conversion {
+  id                 String           @id @default(uuid()) @db.Uuid
+  organizationId     String           @map("organization_id") @db.Uuid
+  clickId            String           @map("click_id") @db.Uuid
+  campaignId         String           @map("campaign_id") @db.Uuid
+  offerId            String?          @map("offer_id") @db.Uuid
+  affiliateNetworkId String?          @map("affiliate_network_id") @db.Uuid
+  goal               String           @default("default")
+  /// Kunci idempotensi: <affiliateNetworkId>:<transactionId> atau <clickId>:<goal>
+  idempotencyKey     String           @unique @map("idempotency_key")
+  transactionId      String?          @map("transaction_id")
+  status             ConversionStatus
+  source             ConversionSource
+  payout             Decimal          @default(0) @db.Decimal(18, 6)
+  currency           String           @default("USD") @db.Char(3)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  verifiedAt         DateTime?        @map("verified_at")
+
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  click            Click                  @relation(fields: [clickId], references: [id], onDelete: Cascade)
+  campaign         Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  offer            Offer?                 @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  affiliateNetwork AffiliateNetwork?      @relation(fields: [affiliateNetworkId], references: [id], onDelete: SetNull)
+  adjustments      ConversionAdjustment[]
+  deliveries       PostbackDelivery[]
+
+  @@index([organizationId, createdAt])
+  @@index([campaignId, createdAt])
+  @@index([clickId])
+  @@map("conversions")
+}
+
+model ConversionAdjustment {
+  id           String           @id @default(uuid()) @db.Uuid
+  conversionId String           @map("conversion_id") @db.Uuid
+  fromStatus   ConversionStatus @map("from_status")
+  toStatus     ConversionStatus @map("to_status")
+  fromPayout   Decimal          @map("from_payout") @db.Decimal(18, 6)
+  toPayout     Decimal          @map("to_payout") @db.Decimal(18, 6)
+  reason       String
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  conversion Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+
+  @@index([conversionId])
+  @@map("conversion_adjustments")
+}
+
+enum InboundResult {
+  ACCEPTED
+  UPDATED
+  DUPLICATE
+  UNKNOWN_CLICK
+  INVALID
+  FORBIDDEN_IP
+}
+
+/// Log mentah setiap postback masuk (audit & debugging).
+model InboundPostback {
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String        @map("organization_id") @db.Uuid
+  affiliateNetworkId String        @map("affiliate_network_id") @db.Uuid
+  receivedAt         DateTime      @default(now()) @map("received_at")
+  ipHash             String?       @map("ip_hash")
+  method             String
+  params             Json
+  result             InboundResult
+  message            String?
+  conversionId       String?       @map("conversion_id") @db.Uuid
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  affiliateNetwork AffiliateNetwork @relation(fields: [affiliateNetworkId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, receivedAt])
+  @@index([affiliateNetworkId, receivedAt])
+  @@map("inbound_postbacks")
+}
+
+enum DeliveryStatus {
+  QUEUED
+  DELIVERED
+  FAILED
+  DEAD
+  TEST_SKIPPED
+}
+
+/// Postback KELUAR ke jaringan iklan.
+model PostbackDelivery {
+  id               String         @id @default(uuid()) @db.Uuid
+  organizationId   String         @map("organization_id") @db.Uuid
+  conversionId     String         @map("conversion_id") @db.Uuid
+  networkAccountId String         @map("network_account_id") @db.Uuid
+  idempotencyKey   String         @unique @map("idempotency_key")
+  status           DeliveryStatus @default(QUEUED)
+  attempts         Int            @default(0)
+  targetHost       String?        @map("target_host")
+  lastStatusCode   Int?           @map("last_status_code")
+  lastResponse     String?        @map("last_response")
+  lastError        String?        @map("last_error")
+  /// null = tidak dapat ditentukan; true/false = berdasarkan postbackSuccessPattern
+  providerAccepted Boolean?       @map("provider_accepted")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  deliveredAt      DateTime?      @map("delivered_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversion     Conversion     @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount @relation(fields: [networkAccountId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([status, updatedAt])
+  @@map("postback_deliveries")
+}
+
+enum SpendSource {
+  MANUAL
+  CSV
+  API
+}
+
+/// Spend yang dilaporkan (manual/CSV pada Phase 1, API pada Phase 2).
+model SpendEntry {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  campaignId     String      @map("campaign_id") @db.Uuid
+  date           DateTime    @db.Date
+  amount         Decimal     @db.Decimal(18, 6)
+  currency       String      @default("USD") @db.Char(3)
+  source         SpendSource @default(MANUAL)
+  note           String?
+  createdById    String?     @map("created_by_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date, source])
+  @@index([organizationId, date])
+  @@map("spend_entries")
+}
+
+// ───────────────────────────── Audit ─────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String?  @map("entity_id")
+  before         Json?
+  after          Json?
+  ipHash         String?  @map("ip_hash")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ───────────────────────────── Phase 2: sinkronisasi jaringan ─────────────────────────────
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+/// Statistik harian MENURUT JARINGAN IKLAN (bukan data tracking internal).
+/// Tanggal = tanggal dalam zona waktu akun jaringan (network_accounts.network_timezone).
+model NetworkStatDaily {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  networkAccountId   String   @map("network_account_id") @db.Uuid
+  date               DateTime @db.Date
+  externalCampaignId String   @map("external_campaign_id")
+  /// Campaign internal hasil pemetaan external_campaign_id (null = belum dipetakan)
+  campaignId         String?  @map("campaign_id") @db.Uuid
+  zoneId             String   @default("") @map("zone_id")
+  country            String   @default("") @db.VarChar(2)
+  impressions        Int      @default(0)
+  clicks             Int      @default(0)
+  conversions        Int      @default(0)
+  spend              Decimal  @default(0) @db.Decimal(18, 6)
+  currency           String   @default("USD") @db.Char(3)
+  syncedAt           DateTime @default(now()) @map("synced_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount @relation(fields: [networkAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([networkAccountId, date, externalCampaignId, zoneId, country])
+  @@index([organizationId, date])
+  @@index([campaignId, date])
+  @@map("network_stats_daily")
+}
+
+model SyncRun {
+  id                String     @id @default(uuid()) @db.Uuid
+  organizationId    String     @map("organization_id") @db.Uuid
+  networkAccountId  String     @map("network_account_id") @db.Uuid
+  trigger           String     @default("schedule")
+  status            SyncStatus @default(RUNNING)
+  rangeFrom         DateTime   @map("range_from") @db.Date
+  rangeTo           DateTime   @map("range_to") @db.Date
+  requestCount      Int        @default(0) @map("request_count")
+  rowsUpserted      Int        @default(0) @map("rows_upserted")
+  unmappedCampaigns String[]   @default([]) @map("unmapped_campaigns")
+  error             String?
+  startedAt         DateTime   @default(now()) @map("started_at")
+  finishedAt        DateTime?  @map("finished_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount @relation(fields: [networkAccountId], references: [id], onDelete: Cascade)
+
+  @@index([networkAccountId, startedAt])
+  @@map("sync_runs")
+}
+
+enum ZoneListType {
+  BLACKLIST
+  WHITELIST
+}
+
+/// Daftar zone internal. campaign_id null = berlaku untuk semua campaign pada akun jaringan.
+/// Push ke API jaringan hanya lewat approval (Phase 6).
+model ZoneListEntry {
+  id               String       @id @default(uuid()) @db.Uuid
+  organizationId   String       @map("organization_id") @db.Uuid
+  networkAccountId String       @map("network_account_id") @db.Uuid
+  campaignId       String?      @map("campaign_id") @db.Uuid
+  zoneId           String       @map("zone_id")
+  listType         ZoneListType @map("list_type")
+  reason           String?
+  createdById      String?      @map("created_by_id") @db.Uuid
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  networkAccount NetworkAccount @relation(fields: [networkAccountId], references: [id], onDelete: Cascade)
+  campaign       Campaign?      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([networkAccountId, campaignId])
+  @@index([organizationId])
+  @@map("zone_list_entries")
+}
+
+// ───────────────────────────── Phase 2: alert & notifikasi ─────────────────────────────
+
+enum Severity {
+  INFO
+  WARNING
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Alert {
+  id               String      @id @default(uuid()) @db.Uuid
+  organizationId   String      @map("organization_id") @db.Uuid
+  type             String
+  severity         Severity
+  title            String
+  body             String
+  /// Alert dengan dedupe_key sama dalam satu organisasi tidak dibuat ulang selama masih OPEN
+  dedupeKey        String      @map("dedupe_key")
+  status           AlertStatus @default(OPEN)
+  entityType       String?     @map("entity_type")
+  entityId         String?     @map("entity_id")
+  occurrences      Int         @default(1)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  lastSeenAt       DateTime    @default(now()) @map("last_seen_at")
+  acknowledgedAt   DateTime?   @map("acknowledged_at")
+  acknowledgedById String?     @map("acknowledged_by_id") @db.Uuid
+  resolvedAt       DateTime?   @map("resolved_at")
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries   NotificationDelivery[]
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, status, createdAt])
+  @@map("alerts")
+}
+
+enum ChannelType {
+  TELEGRAM
+}
+
+model NotificationChannel {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  type           ChannelType
+  name           String
+  /// Chat ID tujuan (grup/channel/user) — bukan rahasia
+  target         String
+  /// Kredensial (mis. token bot Telegram), terenkripsi AES-256-GCM
+  secretEnc      String      @map("secret_enc")
+  secretHint     String?     @map("secret_hint")
+  minSeverity    Severity    @default(WARNING) @map("min_severity")
+  enabled        Boolean     @default(true)
+  lastTestAt     DateTime?   @map("last_test_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries   NotificationDelivery[]
+
+  @@index([organizationId])
+  @@map("notification_channels")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model NotificationDelivery {
+  id        String             @id @default(uuid()) @db.Uuid
+  alertId   String             @map("alert_id") @db.Uuid
+  channelId String             @map("channel_id") @db.Uuid
+  status    NotificationStatus @default(QUEUED)
+  attempts  Int                @default(0)
+  error     String?
+  createdAt DateTime           @default(now()) @map("created_at")
+  sentAt    DateTime?          @map("sent_at")
+
+  alert   Alert               @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  channel NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([alertId, channelId])
+  @@map("notification_deliveries")
+}

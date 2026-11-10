@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/.env
+**/.env.*
+infra/backups
+infra/data
+docs
+*.md
+test.php
+.git

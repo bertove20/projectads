@@ -1,0 +1,154 @@
+# EAIP — Docker Compose untuk satu VPS (Ubuntu 24.04+).
+# Jalankan dari folder infra/:   docker compose --env-file .env up -d --build
+#
+# Jaringan:
+#   - "edge"     : hanya reverse-proxy yang membuka port 80/443 ke internet.
+#   - "internal" : api, tracker, worker, postgres, redis. PostgreSQL & Redis TIDAK membuka port ke host.
+
+name: eaip
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: apps/api/Dockerfile
+  image: eaip-api:${APP_VERSION:-latest}
+  env_file: ${ENV_FILE:-.env}
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+  restart: unless-stopped
+  networks: [internal]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  reverse-proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+      TRACKER_DOMAIN: ${TRACKER_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge, internal]
+    depends_on:
+      api: { condition: service_healthy }
+      tracker: { condition: service_healthy }
+      dashboard: { condition: service_healthy }
+    mem_limit: 256m
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/seed.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *app
+    command: ["node", "dist/main.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 768m
+
+  tracker:
+    <<: *app
+    command: ["node", "dist/tracker.main.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+
+  worker:
+    <<: *app
+    command: ["node", "dist/worker.main.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    mem_limit: 512m
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: apps/dashboard/Dockerfile
+    image: eaip-dashboard:${APP_VERSION:-latest}
+    restart: unless-stopped
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+    mem_limit: 384m
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    shm_size: 256m
+    mem_limit: 2g
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # noeviction wajib untuk BullMQ; AOF agar antrean tidak hilang saat restart
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    mem_limit: 640m
+
+networks:
+  edge: {}
+  internal:
+    internal: false   # worker butuh akses keluar untuk mengirim postback
+
+volumes:
+  postgres_data: {}
+  redis_data: {}
+  caddy_data: {}
+  caddy_config: {}

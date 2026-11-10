@@ -1,0 +1,43 @@
+# Override untuk pengujian LOKAL saja (jangan dipakai di VPS):
+#   docker compose -f compose.yaml -f compose.local.yaml --env-file .env.local up -d --build
+# - Tanpa reverse-proxy/HTTPS; api & tracker dibuka di 127.0.0.1 saja.
+# - "mock-network" meniru jaringan iklan (postback), RollerAds API, dan Telegram Bot API.
+#   Tidak ada request ke layanan asli.
+
+x-mocks: &mocks
+  ROLLERADS_API_BASE: http://mock-network:4900/v2
+  TELEGRAM_API_BASE: http://mock-network:4900/telegram
+  RECON_MIN_CLICKS: "50"
+
+services:
+  reverse-proxy:
+    profiles: ["vps"]
+
+  api:
+    ports: ["127.0.0.1:4000:4000"]
+    environment:
+      <<: *mocks
+      COOKIE_SECURE: "false"
+
+  tracker:
+    ports: ["127.0.0.1:4100:4100"]
+
+  worker:
+    environment:
+      <<: *mocks
+      ALLOW_INSECURE_POSTBACK: "true"
+      ALLOW_PRIVATE_POSTBACK_TARGETS: "true"
+      # Sinkronisasi lebih sering & ambang klik lebih rendah agar mudah diuji
+      SYNC_INTERVAL_MINUTES: "15"
+      RECON_MIN_CLICKS: "50"
+
+  dashboard:
+    ports: ["127.0.0.1:3001:3000"]
+
+  mock-network:
+    image: node:22-alpine
+    networks: [internal]
+    ports: ["127.0.0.1:4900:4900"]
+    volumes:
+      - ./mock/mock-server.js:/mock/mock-server.js:ro
+    command: ["node", "/mock/mock-server.js"]
