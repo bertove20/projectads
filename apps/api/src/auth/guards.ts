@@ -115,9 +115,14 @@ export class PermissionGuard implements CanActivate {
     if (user.isSuperAdmin) {
       const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } });
       if (!org) throw new ForbiddenException({ code: 'ORG_FORBIDDEN', message: 'Organisasi tidak ditemukan' });
+      // Super Admin bisa sekaligus anggota organisasi (owner kartu, catatan waktu, "Tugas saya").
+      const own = await this.prisma.membership.findUnique({
+        where: { userId_organizationId: { userId: user.id, organizationId: orgId } },
+        select: { id: true, status: true },
+      });
       req.org = {
         organizationId: orgId,
-        membershipId: null,
+        membershipId: own?.status === 'ACTIVE' ? own.id : null,
         roleKey: 'SUPER_ADMIN',
         permissions: new Set(ALL_PERMISSIONS),
         campaignIds: null,

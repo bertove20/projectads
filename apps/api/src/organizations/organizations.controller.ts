@@ -140,6 +140,7 @@ export class OrganizationsController {
         user: { select: { id: true, email: true, name: true, mfaEnabled: true, lastLoginAt: true, status: true } },
         role: { select: { key: true, name: true } },
         assignments: { where: { resourceType: 'CAMPAIGN' }, select: { resourceId: true } },
+        positions: { select: { position: true, isPrimary: true }, orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -150,6 +151,8 @@ export class OrganizationsController {
       dataScope: m.dataScope,
       status: m.status,
       campaignIds: m.assignments.map((a) => a.resourceId),
+      positions: m.positions.map((p) => p.position),
+      primaryPosition: m.positions.find((p) => p.isPrimary)?.position ?? null,
       createdAt: m.createdAt,
     }));
   }

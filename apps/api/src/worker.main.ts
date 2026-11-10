@@ -10,6 +10,7 @@ import { networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } 
 import { NetworkSyncService } from './networks/network-sync.service';
 import { DeliveryService } from './postbacks/delivery.service';
 import { WorkerService } from './worker/worker.service';
+import { TasksService } from './tasks/tasks.service';
 import { DomainsService } from './domains/domains.service';
 import { dnsResolverProvider } from './domains/resolver.provider';
 
@@ -21,6 +22,7 @@ import { dnsResolverProvider } from './domains/resolver.provider';
     NetworkSyncService,
     NotificationService,
     AlertService,
+    TasksService,
     DomainsService,
     dnsResolverProvider,
     WorkerService,

@@ -3,6 +3,7 @@ import { Severity } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { NOTIFY_QUEUE, NotifyJob } from '../common/queues';
+import { TasksService } from '../tasks/tasks.service';
 
 export interface RaiseAlert {
   organizationId: string;
@@ -30,6 +31,7 @@ export class AlertService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(NOTIFY_QUEUE) private readonly queue: Queue<NotifyJob>,
+    private readonly tasks: TasksService,
   ) {}
 
   async raise(a: RaiseAlert): Promise<{ id: string; isNew: boolean }> {
@@ -65,6 +67,14 @@ export class AlertService {
       await this.queue.add('notify', { alertId: alert.id }, { attempts: 5, backoff: { type: 'exponential', delay: 20_000 }, removeOnComplete: 1000, removeOnFail: 5000 });
     } catch (err) {
       this.logger.warn({ err: (err as Error).message, alertId: alert.id }, 'Gagal mengantrikan notifikasi');
+    }
+    // Alert serius menjadi incident card di Kanban (read.md 19.3).
+    if (severityAtLeast(alert.severity, 'HIGH')) {
+      try {
+        await this.tasks.incidentFromAlert(alert.id);
+      } catch (err) {
+        this.logger.warn({ err: (err as Error).message, alertId: alert.id }, 'Gagal membuat incident card');
+      }
     }
     return { id: alert.id, isNew: true };
   }

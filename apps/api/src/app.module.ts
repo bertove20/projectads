@@ -26,6 +26,10 @@ import { DomainsService } from './domains/domains.service';
 import { dnsResolverProvider } from './domains/resolver.provider';
 import { NetworkReportsController } from './reports/network-reports.controller';
 import { ReportsController } from './reports/reports.controller';
+import { TaskStreamService } from './tasks/task-stream.service';
+import { TasksController } from './tasks/tasks.controller';
+import { TasksService } from './tasks/tasks.service';
+import { TeamsController } from './tasks/teams.controller';
 
 /** Proses "api": REST API untuk dashboard (/api/v1/*). */
 @Module({
@@ -49,12 +53,16 @@ import { ReportsController } from './reports/reports.controller';
     AlertsController,
     EventsController,
     DomainsController,
+    TasksController,
+    TeamsController,
   ],
   providers: [
     SessionService,
     AuthService,
     AnalyticsService,
     AlertService,
+    TasksService,
+    TaskStreamService,
     NetworkSyncService,
     DomainsService,
     dnsResolverProvider,

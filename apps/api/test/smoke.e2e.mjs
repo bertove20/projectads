@@ -534,6 +534,149 @@ async function main() {
   const bDom = await buyer.post('/domains', { hostname: `b-${RUN}.e2e-ok.example` });
   check('Media Buyer tidak bisa mengelola domain', bDom.status === 403, bDom.status);
 
+  // ───────────────────────────── Phase 4 ─────────────────────────────
+  console.log('\n[21] Phase 4 — tim, jabatan, board & kartu');
+  admin.org = orgA;
+  buyer.org = orgA;
+  const people = await admin.get('/people');
+  const meMember = people.body?.find((p) => p.isMe);
+  const buyerMember = people.body?.find((p) => p.id === add.body.id);
+  check('direktori anggota tanpa email', people.status === 200 && !!meMember && !!buyerMember && !('email' in buyerMember) && !JSON.stringify(people.body).includes('@example.com'), people.body?.[0]);
+  const pos = await admin.put(`/people/${meMember?.id}/positions`, { positions: ['TRACKING_SPECIALIST', 'ADS_MANAGER'], primary: 'TRACKING_SPECIALIST' });
+  check('jabatan anggota ditetapkan (Tracking Specialist utama)', pos.status === 200 && pos.body.primary === 'TRACKING_SPECIALIST', pos);
+  const badPos = await admin.put(`/people/${meMember?.id}/positions`, { positions: ['MEDIA_BUYER'], primary: 'FRAUD_ANALYST' });
+  check('jabatan utama di luar daftar ditolak', badPos.status === 400, badPos.status);
+  check('Media Buyer tidak bisa mengatur jabatan', (await buyer.put(`/people/${buyerMember?.id}/positions`, { positions: ['ADS_MANAGER'] })).status === 403);
+  const team = await admin.post('/teams', { name: `Tim ${RUN}`, leadMembershipId: meMember?.id });
+  check('tim dibuat, ketua otomatis jadi anggota', team.status === 201);
+  await admin.put(`/teams/${team.body.id}/members`, { membershipIds: [buyerMember?.id] });
+  const teams = await admin.get('/teams');
+  const tRow = teams.body?.find((t) => t.id === team.body.id);
+  check('anggota tim = ketua + media buyer', tRow?.members?.length === 2 && tRow?.lead?.id === meMember?.id, tRow);
+
+  const board = await admin.post('/boards', { name: `Board ${RUN}`, teamId: team.body.id });
+  check('board dibuat dengan 7 kolom default', board.status === 201 && board.body.columns?.map((c) => c.kind).join() === 'BACKLOG,TODO,IN_PROGRESS,REVIEW,WAITING_APPROVAL,BLOCKED,DONE', board.body?.columns?.map((c) => c.kind));
+  const col = Object.fromEntries((board.body.columns ?? []).map((c) => [c.kind, c.id]));
+  check('Media Buyer tidak bisa membuat board', (await buyer.post('/boards', { name: 'x board' })).status === 403);
+  const c1 = await admin.post('/cards', { boardId: board.body.id, title: 'Cek postback campaign 1', campaignId: camp.body.id, priority: 'HIGH', assigneeIds: [buyerMember?.id], dueDate: '2026-12-01' });
+  const c2 = await admin.post('/cards', { boardId: board.body.id, title: 'Audit zone campaign 2', campaignId: camp2.body.id, approvalRequired: true });
+  const c3 = await admin.post('/cards', { boardId: board.body.id, title: 'Siapkan creative baru' });
+  check('kartu dibuat dengan nomor berurutan di kolom To Do', [c1, c2, c3].every((c) => c.status === 201 && c.body.columnId === col.TODO) && c2.body.number === c1.body.number + 1 && c3.body.number === c2.body.number + 1, [c1.status, c2.status, c3.status]);
+  check('owner default = pembuat kartu', c3.body.ownerMembershipId === meMember?.id, c3.body.ownerMembershipId);
+  const badRef = await admin.post('/cards', { boardId: board.body.id, title: 'x ref', ownerMembershipId: '00000000-0000-4000-8000-000000000000' });
+  check('owner di luar organisasi ditolak', badRef.status === 400, badRef.status);
+
+  const bBoard = await buyer.get(`/boards/${board.body.id}`);
+  const bIds = (bBoard.body?.cards ?? []).map((c) => c.id);
+  check('Media Buyer (ASSIGNED) hanya melihat kartu campaign/tugasnya', bBoard.status === 200 && bIds.includes(c1.body.id) && !bIds.includes(c2.body.id) && !bIds.includes(c3.body.id), bIds.length);
+  check('Media Buyer tidak bisa membuka kartu di luar cakupan (404)', (await buyer.get(`/cards/${c2.body.id}`)).status === 404);
+  const bCardOther = await buyer.post('/cards', { boardId: board.body.id, title: 'Kartu campaign lain', campaignId: camp2.body.id });
+  check('Media Buyer tidak bisa membuat kartu untuk campaign di luar cakupan', bCardOther.status === 403, bCardOther.status);
+  const bCard = await buyer.post('/cards', { boardId: board.body.id, title: 'Catatan pribadi buyer' });
+  check('Media Buyer bisa membuat kartu miliknya sendiri', bCard.status === 201 && bCard.body.ownerMembershipId === buyerMember?.id, bCard);
+
+  // urutan & versi
+  let v1 = c1.body.version;
+  const mv = await admin.post(`/cards/${c1.body.id}/move`, { columnId: col.IN_PROGRESS, index: 0, version: v1 });
+  check('kartu dipindah ke In Progress, versi naik', mv.status === 200 && mv.body.columnId === col.IN_PROGRESS && mv.body.version === v1 + 1, mv);
+  const stale = await admin.post(`/cards/${c1.body.id}/move`, { columnId: col.REVIEW, index: 0, version: v1 });
+  check('versi usang ditolak 409 VERSION_CONFLICT', stale.status === 409 && stale.body?.error?.code === 'VERSION_CONFLICT', stale);
+  v1 = mv.body.version;
+  await admin.post(`/cards/${c3.body.id}/move`, { columnId: col.IN_PROGRESS, index: 0, version: c3.body.version });
+  const ip = (await admin.get(`/boards/${board.body.id}`)).body.cards.filter((c) => c.columnId === col.IN_PROGRESS).map((c) => c.id);
+  check('urutan dalam kolom mengikuti index (c3 sebelum c1)', ip[0] === c3.body.id && ip[1] === c1.body.id, ip);
+
+  // aturan Done
+  const noEv = await admin.post(`/cards/${c1.body.id}/move`, { columnId: col.DONE, index: 0, version: v1 });
+  check('Done tanpa bukti penyelesaian ditolak', noEv.status === 422 && noEv.body?.error?.code === 'EVIDENCE_REQUIRED', noEv);
+  const dep = await admin.post(`/cards/${c1.body.id}/dependencies`, { dependsOnCardId: c3.body.id });
+  check('dependensi ditambahkan', dep.status === 201, dep);
+  const cyc = await admin.post(`/cards/${c3.body.id}/dependencies`, { dependsOnCardId: c1.body.id });
+  check('dependensi melingkar ditolak', cyc.status === 422 && cyc.body?.error?.code === 'DEPENDENCY_CYCLE', cyc);
+  let cur = (await admin.get(`/cards/${c1.body.id}`)).body;
+  const evSet = await admin.patch(`/cards/${c1.body.id}`, { version: cur.version, completionEvidence: 'Postback terverifikasi: 3 konversi VERIFIED di log' });
+  check("bukti penyelesaian disimpan", evSet.status === 200 && evSet.body.completionEvidence?.startsWith("Postback"), evSet);
+  const depOpen = await admin.post(`/cards/${c1.body.id}/move`, { columnId: col.DONE, index: 0, version: evSet.body.version });
+  check('Done diblokir dependensi yang belum selesai', depOpen.status === 422 && depOpen.body?.error?.code === 'DEPENDENCY_OPEN', depOpen);
+  await admin.req('DELETE', `/cards/${c1.body.id}/dependencies/${c3.body.id}`);
+  cur = (await admin.get(`/cards/${c1.body.id}`)).body;
+  const done = await admin.post(`/cards/${c1.body.id}/move`, { columnId: col.DONE, index: 0, version: cur.version });
+  check('kartu dengan bukti masuk Done & completedAt terisi', done.status === 200 && !!done.body.completedAt, done);
+
+  // approval
+  const c2v = (await admin.patch(`/cards/${c2.body.id}`, { version: c2.body.version, completionEvidence: 'Zone 5552 diblacklist' })).body.version;
+  await admin.put(`/organizations/current/members/${add.body.id}/campaigns`, { campaignIds: [camp.body.id, camp2.body.id] });
+  const bApprove = await buyer.post(`/cards/${c2.body.id}/move`, { columnId: col.DONE, index: 0, version: c2v });
+  check('kartu approvalRequired tidak bisa diselesaikan Media Buyer', bApprove.status === 422 && bApprove.body?.error?.code === 'APPROVAL_REQUIRED', bApprove);
+  const bWait = await buyer.post(`/cards/${c2.body.id}/move`, { columnId: col.WAITING_APPROVAL, index: 0, version: c2v });
+  check('Media Buyer memindahkan ke Waiting Approval', bWait.status === 200, bWait);
+  const bUnset = await buyer.patch(`/cards/${c2.body.id}`, { version: bWait.body.version, approvalRequired: false });
+  check('Media Buyer tidak bisa mencabut kewajiban approval', bUnset.status === 403, bUnset.status);
+  const aApprove = await admin.post(`/cards/${c2.body.id}/move`, { columnId: col.DONE, index: 0, version: bWait.body.version });
+  check('Owner menyetujui → Done', aApprove.status === 200 && !!aApprove.body.completedAt, aApprove);
+  await admin.put(`/organizations/current/members/${add.body.id}/campaigns`, { campaignIds: [camp.body.id] });
+
+  // sub-item
+  const ck = await buyer.post(`/cards/${c1.body.id}/checklist`, { text: 'Cek log postback masuk' });
+  const ckDone = await buyer.patch(`/checklist/${ck.body?.id}`, { done: true });
+  check('checklist ditambah & dicentang', ck.status === 201 && ckDone.status === 200 && ckDone.body.done === true, [ck.status, ckDone.status]);
+  const cm = await buyer.post(`/cards/${c1.body.id}/comments`, { body: `Sudah dicek @[Admin](${meMember?.id}) dan @[Palsu](00000000-0000-4000-8000-000000000000)` });
+  check('komentar menyimpan mention anggota yang sah saja', cm.status === 201 && cm.body.mentions?.length === 1 && cm.body.mentions[0] === meMember?.id, cm.body?.mentions);
+  const badLink = await buyer.post(`/cards/${c1.body.id}/links`, { title: 'x', url: 'javascript:alert(1)' });
+  check('tautan non-http ditolak', badLink.status === 400, badLink.status);
+  const lk = await buyer.post(`/cards/${c1.body.id}/links`, { title: 'Laporan', url: 'https://docs.example.com/r/1' });
+  const tm = await buyer.post(`/cards/${c1.body.id}/time`, { minutes: 45, date: '2026-11-11', note: 'cek log' });
+  check('tautan & catatan waktu ditambahkan', lk.status === 201 && tm.status === 201, [lk.status, tm.status]);
+  const detail = (await admin.get(`/cards/${c1.body.id}`)).body;
+  check('detail kartu: checklist, komentar (nama penulis), waktu total, timeline', detail.checklist?.length === 1 && detail.comments?.[0]?.authorName === 'Viewer Test' && detail.totalMinutes === 45 && detail.activities?.some((a) => a.type === 'moved'), { c: detail.checklist?.length, m: detail.totalMinutes });
+  const myTasks = await admin.get("/tasks/mine");
+  check('"Tugas saya" memuat kartu milik & mention', myTasks.status === 200 && myTasks.body.cards.some((c) => c.id === c3.body.id) && myTasks.body.mentions.some((m) => m.card.id === c1.body.id), { cards: myTasks.body?.cards?.length, mentions: myTasks.body?.mentions?.length });
+  const bMine = await buyer.get('/tasks/mine');
+  check('"Tugas saya" Media Buyer memuat kartu yang di-assign', bMine.body?.cards?.some((c) => c.id === c1.body.id) && !bMine.body.cards.some((c) => c.id === c2.body.id), bMine.body?.cards?.map((c) => c.number));
+
+  // kolom & WIP
+  const wip = await admin.post(`/boards/${board.body.id}/columns`, { name: 'QA', wipLimit: 1 });
+  check('kolom custom disisipkan sebelum Done', wip.status === 201 && wip.body.position === 6, wip.body);
+  cur = (await admin.get(`/cards/${c3.body.id}`)).body;
+  await admin.post(`/cards/${c3.body.id}/move`, { columnId: wip.body.id, index: 0, version: cur.version });
+  const bc = (await admin.get(`/cards/${bCard.body.id}`)).body;
+  const overWip = await admin.post(`/cards/${bCard.body.id}/move`, { columnId: wip.body.id, index: 0, version: bc.version });
+  check('batas WIP ditegakkan', overWip.status === 422 && overWip.body?.error?.code === 'WIP_LIMIT', overWip);
+  check('kolom bawaan tidak bisa dihapus', (await admin.req('DELETE', `/columns/${col.REVIEW}`)).status === 422);
+  check('kolom berisi kartu tidak bisa dihapus', (await admin.req('DELETE', `/columns/${wip.body.id}`)).status === 422);
+
+  console.log('\n[22] Phase 4 — real-time (SSE)');
+  const ctrl = new AbortController();
+  const sse = await fetch(`${API}/tasks/stream`, { headers: { cookie: admin.cookie, 'x-organization-id': orgA, accept: 'text/event-stream' }, signal: ctrl.signal });
+  check('stream SSE terbuka dengan X-Accel-Buffering: no', sse.status === 200 && sse.headers.get('content-type')?.includes('text/event-stream') && sse.headers.get('x-accel-buffering') === 'no', [sse.status, sse.headers.get('content-type')]);
+  const reader = sse.body.getReader();
+  let buf = '';
+  const waitFor = async (pred, ms = 8000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const r = await Promise.race([reader.read(), sleep(Math.max(1, end - Date.now())).then(() => null)]);
+      if (!r || r.done) break;
+      buf += new TextDecoder().decode(r.value);
+      if (pred(buf)) return true;
+    }
+    return pred(buf);
+  };
+  check('event ready diterima', await waitFor((b) => b.includes('event: ready')), buf.slice(0, 200));
+  const cLive = await buyer.post('/cards', { boardId: board.body.id, title: 'Kartu realtime' });
+  check('pembuatan kartu oleh anggota lain dipublikasikan ke stream', await waitFor((b) => b.includes(cLive.body?.id ?? 'x') && b.includes('card.created')), buf.slice(-300));
+  ctrl.abort();
+
+  console.log('\n[23] Phase 4 — incident card dari alert');
+  const allBoards = (await admin.get('/boards')).body;
+  const defBoard = allBoards.find((b) => b.isDefault);
+  check('board default organisasi ada', !!defBoard, allBoards.map((b) => b.name));
+  const defCards = (await admin.get(`/boards/${defBoard?.id}`)).body?.cards ?? [];
+  const inc = defCards.find((c) => c.alertId === reconAlert?.id);
+  check('alert HIGH (selisih rekonsiliasi) menjadi incident card', inc?.source === 'ALERT' && inc?.priority === 'HIGH' && inc?.campaign?.id === camp2.body.id, inc);
+  const bDef = (await buyer.get(`/boards/${defBoard?.id}`)).body?.cards ?? [];
+  check('incident card campaign di luar cakupan tidak terlihat Media Buyer', !bDef.some((c) => c.alertId === reconAlert?.id));
+  check('incident card tidak terduplikasi walau alert berulang', defCards.filter((c) => c.alertId === reconAlert?.id).length === 1);
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;
