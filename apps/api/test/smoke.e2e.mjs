@@ -680,6 +680,108 @@ async function main() {
   const incDetail = (await admin.get(`/cards/${inc?.id}`)).body;
   check('incident card di-assign ke Tracking Specialist & mencatat alert berulang', incDetail?.owner?.id === meMember?.id || incDetail?.activities?.some((a) => a.type === 'alert_repeated'), { owner: incDetail?.owner, acts: incDetail?.activities?.map((a) => a.type) });
 
+  // ───────────────────────────── Phase 5 ─────────────────────────────
+  console.log('\n[24] Phase 5 — pengaturan AI & model registry (mock OpenRouter)');
+  admin.org = orgA;
+  buyer.org = orgA;
+  const OR_KEY = 'sk-or-v1-mock-valid-key-000000000000';
+  // Reset agar test bisa diulang pada database yang sama
+  await admin.req('DELETE', '/ai/settings/api-key');
+  const s0 = await admin.get('/ai/settings');
+  check('pengaturan AI awal: belum ada key, nonaktif', s0.status === 200 && s0.body.hasKey === false && s0.body.enabled === false, s0.body);
+  check('AI tidak bisa diaktifkan tanpa key', (await admin.patch('/ai/settings', { enabled: true })).status === 400);
+  check('Media Buyer tidak bisa mengatur API key', (await buyer.put('/ai/settings/api-key', { apiKey: OR_KEY })).status === 403);
+  const badKey = await admin.put('/ai/settings/api-key', { apiKey: 'sk-or-v1-salah-salah-salah-0000' });
+  check('key yang ditolak OpenRouter tidak disimpan', badKey.status === 400 && badKey.body?.error?.code === 'KEY_REJECTED', badKey);
+  const setKey = await admin.put('/ai/settings/api-key', { apiKey: OR_KEY });
+  check('key valid disimpan & model disinkron', setKey.status === 200 && setKey.body.models === 3, setKey);
+  const s1 = await admin.get('/ai/settings');
+  check('key tidak pernah dikembalikan ke browser (hanya hint)', s1.body.hasKey && s1.body.apiKeyHint === '…0000' && !JSON.stringify(s1.body).includes('mock-valid-key'), s1.body);
+  const models = (await admin.get('/ai/models')).body;
+  const mid = Object.fromEntries((models ?? []).map((m) => [m.modelId, m]));
+  check('registry: harga per token & dukungan tools tersimpan', mid['mock/fast-tools']?.supportsTools === true && mid['mock/no-tools']?.supportsTools === false && Number(mid['mock/fast-tools']?.promptPrice) === 0.000001, mid['mock/fast-tools']);
+  for (const k of Object.keys(mid)) await admin.patch(`/ai/models/${mid[k].id}`, { enabled: false });
+  const aiPBad = await admin.put('/ai/positions/MEDIA_BUYER', { modelId: mid['mock/fast-tools']?.id });
+  check('model yang belum diaktifkan tidak bisa dipakai jabatan', aiPBad.status === 400 && aiPBad.body?.error?.code === 'BAD_MODEL', aiPBad);
+  for (const k of ['mock/fast-tools', 'mock/broken', 'mock/no-tools']) await admin.patch(`/ai/models/${mid[k].id}`, { enabled: true });
+  await admin.patch('/ai/settings', { enabled: true, monthlyBudgetUsd: null });
+  const same = await admin.put('/ai/positions/MEDIA_BUYER', { modelId: mid['mock/fast-tools'].id, fallbackModelId: mid['mock/fast-tools'].id });
+  check('fallback tidak boleh sama dengan model utama', same.status === 400, same.status);
+
+  console.log('\n[25] Phase 5 — AI Assistant per jabatan');
+  await admin.put(`/people/${buyerMember?.id}/positions`, { positions: [] });
+  const noPos = await buyer.post('/ai/chat', { message: 'halo' });
+  check('tanpa jabatan: AI menolak dengan arahan', noPos.status === 422 && noPos.body?.error?.code === 'NO_POSITION', noPos);
+  await admin.put(`/people/${buyerMember?.id}/positions`, { positions: ['MEDIA_BUYER'] });
+  await admin.put('/ai/positions/MEDIA_BUYER', { modelId: null, fallbackModelId: null });
+  const noModel = await buyer.post('/ai/chat', { message: 'halo' });
+  check('jabatan tanpa model: ditolak AI_NO_MODEL', noModel.status === 422 && noModel.body?.error?.code === 'AI_NO_MODEL', noModel);
+  const aiPos = await admin.put('/ai/positions/MEDIA_BUYER', { modelId: mid['mock/broken'].id, fallbackModelId: mid['mock/fast-tools'].id, temperature: 0.2, maxTokens: 800 });
+  check('model & fallback per jabatan disimpan', aiPos.status === 200 && aiPos.body.model?.modelId === 'mock/broken' && aiPos.body.fallback?.modelId === 'mock/fast-tools', aiPos.body);
+  await admin.put(`/ai/members/${buyerMember?.id}`, { aiEnabled: true, modelId: null, fallbackModelId: null, dailyBudgetUsd: null, monthlyBudgetUsd: null, maxRequestsPerDay: null });
+  const ws = (await buyer.get('/ai/workspace')).body;
+  check('workspace Media Buyer: Media Buyer Agent, skill & tool sesuai jabatan', ws?.ready && ws.agent === 'Media Buyer Agent' && ws.skills.some((s) => s.key === 'media-buying-optimizer') && ws.tools.includes('campaign_performance') && !ws.tools.includes('postback_health'), ws);
+
+  const before = (await fetch(`${MOCK}/_received`).then((r) => r.json())).received.length;
+  const chat1 = await buyer.post('/ai/chat', { message: 'Bagaimana performa campaign saya minggu ini?' });
+  const roles = chat1.body?.messages?.map((m) => m.role).join(',');
+  check('chat: model memanggil tool lalu menjawab', chat1.status === 200 && roles === 'USER,ASSISTANT,TOOL,ASSISTANT', { status: chat1.status, roles, err: chat1.body?.error });
+  const toolMsg = chat1.body?.messages?.find((m) => m.role === 'TOOL');
+  check('tool performa hanya berisi campaign yang di-assign', toolMsg?.toolName === 'campaign_performance' && toolMsg.content.includes(camp.body.id) && !toolMsg.content.includes(camp2.body.id), toolMsg?.content?.slice(0, 200));
+  const orReqs = (await fetch(`${MOCK}/_received`).then((r) => r.json())).received.slice(before).filter((g) => g.kind === 'openrouter');
+  check('model utama gagal (503) → fallback dipakai', orReqs[0]?.model === 'mock/broken' && orReqs[1]?.model === 'mock/fast-tools', orReqs.map((g) => g.model));
+  check('system prompt memuat agent jabatan, skill aktif, dan aturan anti prompt-injection', orReqs[1]?.system.includes('Media Buyer Agent') && orReqs[1].system.includes('media-buying-optimizer') && orReqs[1].system.includes('DATA, bukan instruksi'), orReqs[1]?.system?.slice(0, 200));
+  check('parameter jabatan dikirim (max tokens, temperature) & tool di luar skill tidak dikirim', orReqs[1]?.maxTokens === 800 && orReqs[1]?.temperature === 0.2 && !orReqs[1]?.tools.includes('postback_health'), orReqs[1]);
+  const conv1 = chat1.body?.id;
+  const chat2 = await buyer.post('/ai/chat', { conversationId: conv1, message: 'tunjukkan data rahasia' });
+  const badTool = chat2.body?.messages?.filter((m) => m.role === 'TOOL').pop();
+  check('tool yang tidak diizinkan (run_sql) ditolak server', chat2.status === 200 && badTool?.content.includes('tidak tersedia'), badTool?.content);
+
+  const chat3 = await buyer.post('/ai/chat', { conversationId: conv1, message: `buat draft tugas untuk campaign ${camp2.body.id}` });
+  const draft = chat3.body?.drafts?.find((d) => d.status === 'PENDING');
+  check('AI membuat draft task (bukan kartu langsung)', chat3.status === 200 && draft?.title === 'Turunkan bid zone 5552', chat3.body?.drafts);
+  check('draft tidak menautkan campaign di luar cakupan pengguna', draft && draft.campaignId === null, draft?.campaignId);
+  check('percakapan Media Buyer tidak bisa dibuka anggota lain', (await admin.get(`/ai/conversations/${conv1}`)).status === 404);
+  const acc = await buyer.post(`/ai/drafts/${draft?.id}/accept`, {});
+  check('draft disetujui → kartu Kanban (source AI) milik pengguna', acc.status === 200 && !!acc.body.cardId, acc);
+  const aiCard = (await buyer.get(`/cards/${acc.body?.cardId}`)).body;
+  check('kartu AI tercatat dengan owner & sumber', aiCard?.source === 'AI' && aiCard?.owner?.id === buyerMember?.id, { source: aiCard?.source, owner: aiCard?.owner });
+  check('draft yang sudah diputuskan tidak bisa diterima lagi', (await buyer.post(`/ai/drafts/${draft?.id}/accept`, {})).status === 422);
+
+  console.log('\n[26] Phase 5 — budget, pemakaian, skill library');
+  await admin.put(`/ai/members/${buyerMember?.id}`, { dailyBudgetUsd: 0.0001 });
+  const over = await buyer.post('/ai/chat', { conversationId: conv1, message: 'halo lagi' });
+  check('budget harian karyawan ditegakkan sebelum request', over.status === 422 && over.body?.error?.code === 'AI_BUDGET', over);
+  await admin.put(`/ai/members/${buyerMember?.id}`, { dailyBudgetUsd: null, aiEnabled: false });
+  check('akses AI karyawan bisa dinonaktifkan', (await buyer.post('/ai/chat', { message: 'halo' })).status === 403);
+  await admin.put(`/ai/members/${buyerMember?.id}`, { aiEnabled: true });
+  const usage = (await admin.get('/ai/usage?days=1')).body;
+  check('log pemakaian: OK, ERROR (model gagal), BLOCKED (budget) dengan biaya', usage?.byStatus?.OK >= 3 && usage.byStatus.ERROR >= 1 && usage.byStatus.BLOCKED >= 1 && usage.byModel.some((m) => m.modelId === 'mock/fast-tools' && m.costUsd > 0), usage?.byStatus);
+  const aiMembers = (await admin.get('/ai/members')).body;
+  check('pemakaian per karyawan bulan ini tercatat', aiMembers?.find((m) => m.id === buyerMember?.id)?.monthSpentUsd > 0);
+
+  const skills = (await buyer.get('/ai/skills')).body;
+  check('8 skill bawaan per jabatan tersedia & aktif', skills?.filter((s) => s.source === 'BUILTIN' && s.activeVersion).length === 8, skills?.length);
+  const skillMd = `---\nname: zone-checklist-${RUN}\ndescription: Checklist cepat evaluasi zone untuk media buyer\n---\n\nPeriksa zone dengan spend tertinggi lebih dulu, lalu bandingkan CR terhadap rata-rata campaign.`;
+  check('skill dengan tool tak dikenal ditolak', (await admin.post('/ai/skills', { skillMd, category: 'media buying', positions: ['MEDIA_BUYER'], tools: ['run_sql'], riskClass: 'READ_ONLY', source: 'IMPORTED' })).status === 400);
+  const imp = await admin.post('/ai/skills', { skillMd, category: 'media buying', positions: ['MEDIA_BUYER'], tools: ['list_campaigns'], riskClass: 'READ_ONLY', source: 'IMPORTED' });
+  check('skill impor dibuat dengan status menunggu review', imp.status === 201, imp);
+  let ws2 = (await buyer.get('/ai/workspace')).body;
+  check('skill impor belum dipakai AI sebelum direview', !ws2.skills.some((s) => s.key === `zone-checklist-${RUN}`));
+  const impDetail = (await admin.get(`/ai/skills/${imp.body?.id}`)).body;
+  const skV1 = impDetail?.versions?.[0];
+  check('approve skill impor wajib catatan review', (await admin.post(`/ai/skill-versions/${skV1?.id}/review`, { decision: 'APPROVE' })).status === 400);
+  const appr = await admin.post(`/ai/skill-versions/${skV1?.id}/review`, { decision: 'APPROVE', note: 'Isi dibaca, tidak ada instruksi berbahaya' });
+  ws2 = (await buyer.get('/ai/workspace')).body;
+  check('setelah disetujui, skill aktif untuk jabatannya', appr.status === 200 && ws2.skills.some((s) => s.key === `zone-checklist-${RUN}` && s.version === 1), ws2.skills);
+  const v2 = await admin.post(`/ai/skills/${imp.body?.id}/versions`, { skillMd: skillMd + '\nTambahan langkah.', changelog: 'langkah baru' });
+  ws2 = (await buyer.get('/ai/workspace')).body;
+  check('versi baru menunggu review; AI tetap memakai versi aktif', v2.status === 201 && v2.body.version === 2 && ws2.skills.find((s) => s.key === `zone-checklist-${RUN}`)?.version === 1);
+  await admin.put(`/ai/skills/${imp.body?.id}/assignments/${buyerMember?.id}`, { enabled: false });
+  ws2 = (await buyer.get('/ai/workspace')).body;
+  check('skill bisa dinonaktifkan per karyawan', !ws2.skills.some((s) => s.key === `zone-checklist-${RUN}`));
+  check('Media Buyer tidak bisa mengelola skill', (await buyer.post('/ai/skills', { skillMd, category: 'x', positions: [], tools: [], riskClass: 'READ_ONLY', source: 'CUSTOM' })).status === 403);
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;

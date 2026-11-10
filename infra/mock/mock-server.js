@@ -3,6 +3,7 @@
  *  - /conversion…        : penerima postback keluar (meniru jaringan iklan)
  *  - /v2/…               : meniru RollerAds API v2 (bentuk respons mengikuti OpenAPI resmi yang disimpan di docs/)
  *  - /telegram/bot…/…    : meniru Telegram Bot API sendMessage
+ *  - /openrouter/api/v1/… : meniru OpenRouter (models & chat completions, format sesuai docs/providers/openrouter)
  *  - /_received          : daftar request yang diterima (untuk assertion test)
  */
 const http = require('http');
@@ -10,6 +11,14 @@ const http = require('http');
 const VALID_TOKEN = 'test-roller-token';
 const received = [];
 let statsRequests = 0;
+
+const OR_KEY = 'sk-or-v1-mock-valid-key-000000000000';
+const orModel = (id, name, tools, prompt, completion) => ({ id, name, context_length: 128000, pricing: { prompt, completion }, top_provider: { max_completion_tokens: 4096 }, supported_parameters: tools ? ['tools', 'temperature', 'max_tokens'] : ['temperature'] });
+const OR_MODELS = [
+  orModel('mock/fast-tools', 'Mock Fast (tools)', true, '0.000001', '0.000002'),
+  orModel('mock/broken', 'Mock Broken', true, '0.000001', '0.000002'),
+  orModel('mock/no-tools', 'Mock Text Only', false, '0.0000005', '0.000001'),
+];
 
 // Data statistik deterministik per hari: campaign 9001 (dipetakan oleh test) dan 9999 (tidak dipetakan)
 const STAT_ROWS = [
@@ -93,6 +102,36 @@ http
         return json(res, 200, [{ items, totals: {}, per_page: 5000, total_pages: 1, total_items: items.length }]);
       }
       return json(res, 404, { message: 'not mocked' });
+    }
+
+    if (url.pathname.startsWith('/openrouter/api/v1/')) {
+      const p = url.pathname.slice('/openrouter/api/v1'.length);
+      if (req.headers.authorization !== 'Bearer ' + OR_KEY) return json(res, 401, { error: { code: 401, message: 'No auth credentials found' } });
+      if (req.method === 'GET' && p === '/models') return json(res, 200, { data: OR_MODELS, total_count: OR_MODELS.length, links: { next: null } });
+      if (req.method === 'POST' && p === '/chat/completions') {
+        let b = {};
+        try {
+          b = JSON.parse(await readBody(req));
+        } catch {}
+        const msgs = Array.isArray(b.messages) ? b.messages : [];
+        const toolNames = (b.tools ?? []).map((t) => t.function?.name);
+        const last = msgs[msgs.length - 1] ?? {};
+        received.push({ at: new Date().toISOString(), kind: 'openrouter', model: b.model, tools: toolNames, system: msgs[0]?.content ?? '', last: last.role === 'tool' ? '[tool]' : String(last.content ?? '').slice(0, 300), maxTokens: b.max_completion_tokens, temperature: b.temperature });
+        if (b.model === 'mock/broken') return json(res, 503, { error: { code: 503, message: 'Provider returned error' } });
+        const usage = { prompt_tokens: 1000, completion_tokens: 200, total_tokens: 1200, cost: 0.0015 };
+        const reply = (message) => json(res, 200, { id: 'gen-' + received.length, object: 'chat.completion', model: b.model, choices: [{ index: 0, finish_reason: message.tool_calls ? 'tool_calls' : 'stop', message: { role: 'assistant', ...message } }], usage });
+        const call = (name, args) => reply({ content: null, tool_calls: [{ id: 'call_' + received.length, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+        if (last.role === 'tool') return reply({ content: 'Ringkasan dari data: ' + String(last.content).slice(0, 400) });
+        const text = String(last.content ?? '').toLowerCase();
+        const today = new Date().toISOString().slice(0, 10);
+        const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+        if (text.includes('draft') && toolNames.includes('propose_task')) return call('propose_task', { title: 'Turunkan bid zone 5552', description: 'Spend tinggi tanpa konversi VERIFIED', priority: 'HIGH', campaignId: (text.match(/[0-9a-f-]{36}/) ?? [])[0] });
+        if (text.includes('performa') && toolNames.includes('campaign_performance')) return call('campaign_performance', { from: weekAgo, to: today, groupBy: 'campaign' });
+        if (text.includes('rahasia')) return call('run_sql', { q: 'select * from users' });
+        if (text.includes('campaign') && toolNames.includes('list_campaigns')) return call('list_campaigns', {});
+        return reply({ content: 'Halo dari mock OpenRouter.' });
+      }
+      return json(res, 404, { error: { code: 404, message: 'Not found' } });
     }
 
     if (url.pathname.startsWith('/telegram/bot')) {

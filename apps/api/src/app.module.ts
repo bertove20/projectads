@@ -26,6 +26,11 @@ import { DomainsService } from './domains/domains.service';
 import { dnsResolverProvider } from './domains/resolver.provider';
 import { NetworkReportsController } from './reports/network-reports.controller';
 import { ReportsController } from './reports/reports.controller';
+import { AiAdminController } from './ai/ai-admin.controller';
+import { AiToolsService } from './ai/ai-tools';
+import { AiService } from './ai/ai.service';
+import { AssistantController } from './ai/assistant.controller';
+import { SkillsController } from './ai/skills.controller';
 import { TaskStreamService } from './tasks/task-stream.service';
 import { TasksController } from './tasks/tasks.controller';
 import { TasksService } from './tasks/tasks.service';
@@ -55,6 +60,9 @@ import { TeamsController } from './tasks/teams.controller';
     DomainsController,
     TasksController,
     TeamsController,
+    AiAdminController,
+    SkillsController,
+    AssistantController,
   ],
   providers: [
     SessionService,
@@ -63,6 +71,8 @@ import { TeamsController } from './tasks/teams.controller';
     AlertService,
     TasksService,
     TaskStreamService,
+    AiService,
+    AiToolsService,
     NetworkSyncService,
     DomainsService,
     dnsResolverProvider,

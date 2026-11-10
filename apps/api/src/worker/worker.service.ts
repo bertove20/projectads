@@ -149,6 +149,17 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
   }
 
   async sweep() {
+    // 0) Retensi riwayat percakapan AI (default 90 hari bila organisasi belum mengatur)
+    try {
+      await this.prisma.$executeRaw`
+        DELETE FROM ai_conversations c
+        USING organizations o LEFT JOIN ai_settings s ON s.organization_id = o.id
+        WHERE c.organization_id = o.id
+          AND c.updated_at < now() - make_interval(days => COALESCE(s.retention_days, 90))`;
+    } catch (err) {
+      this.logger.warn({ err: (err as Error).message }, 'Gagal menghapus percakapan AI kedaluwarsa');
+    }
+
     // 1) Delivery QUEUED yang tidak pernah masuk antrean (mis. Redis sempat mati)
     const stale = await this.prisma.postbackDelivery.findMany({
       where: { status: 'QUEUED', updatedAt: { lt: new Date(Date.now() - SWEEP_EVERY_MS) } },
