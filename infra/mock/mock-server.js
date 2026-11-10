@@ -127,6 +127,7 @@ http
         const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
         if (text.includes('draft') && toolNames.includes('propose_task')) return call('propose_task', { title: 'Turunkan bid zone 5552', description: 'Spend tinggi tanpa konversi VERIFIED', priority: 'HIGH', campaignId: (text.match(/[0-9a-f-]{36}/) ?? [])[0] });
         if (text.includes('performa') && toolNames.includes('campaign_performance')) return call('campaign_performance', { from: weekAgo, to: today, groupBy: 'campaign' });
+        if (text.includes('postback') && toolNames.includes('postback_health')) return call('postback_health', { days: 7 });
         if (text.includes('rahasia')) return call('run_sql', { q: 'select * from users' });
         if (text.includes('campaign') && toolNames.includes('list_campaigns')) return call('list_campaigns', {});
         return reply({ content: 'Halo dari mock OpenRouter.' });

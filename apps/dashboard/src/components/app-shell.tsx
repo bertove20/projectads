@@ -35,6 +35,14 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     ],
   },
   {
+    section: 'AI',
+    items: [
+      { href: '/assistant', label: 'AI Assistant', permission: 'ai.use' },
+      { href: '/ai/skills', label: 'Skill Library', permission: 'ai.use' },
+      { href: '/ai/settings', label: 'Pengaturan AI', permission: 'ai.manage' },
+    ],
+  },
+  {
     section: 'Iklan',
     items: [
       { href: '/campaigns', label: 'Campaigns', permission: 'campaigns.read' },

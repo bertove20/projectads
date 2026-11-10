@@ -5,6 +5,15 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 
 ## [Unreleased] — branch `develop`
 
+### Ditambahkan (Phase 5 — AI Workspace & Skill Library)
+- **Gateway OpenRouter** (server-side): API key diuji lalu disimpan terenkripsi, tidak pernah dikirim ke browser; model registry disinkron dari OpenRouter (harga, konteks, dukungan tool) dan hanya model yang diaktifkan admin yang bisa dipakai.
+- **AI Assistant per jabatan**: 8 agent (Strategy, Media Buyer, Analytics, Tracking, Fraud, Creative, CRO, Automation); model, fallback, temperature, maks token, budget harian/bulanan per jabatan dengan override per karyawan; budget organisasi & batas request.
+- **Tool server-side ber-cakupan**: AI membaca daftar campaign, performa, alert, kesehatan postback, dan tugas hanya dalam cakupan pengguna; tidak ada SQL dari model; tool di luar skill/izin ditolak.
+- **Draft task dari AI**: AI hanya mengusulkan; kartu Kanban (sumber AI) dibuat setelah karyawan menyetujui.
+- **Skill Library**: 8 skill bawaan, SKILL.md berversi, versi baru wajib direview; skill impor dianggap untrusted (catatan review + disetujui admin lain); override skill per karyawan.
+- **Pemakaian & biaya**: log token dan biaya per request (aktual dari OpenRouter), grafik harian, per model, kegagalan & blokir budget; retensi riwayat percakapan (default 90 hari).
+- Halaman: AI Assistant, Skill Library, Pengaturan AI.
+
 ### Ditambahkan (Phase 4 — Tim & Kanban)
 - **Tim & jabatan**: 8 jabatan kerja (terpisah dari role hak akses), tim dengan ketua & anggota, halaman "Tim kerja".
 - **Board Kanban**: 7 kolom default + kolom custom dengan batas WIP, drag & drop (mouse, sentuh, keyboard), tampilan board & daftar, filter (orang, prioritas, campaign, lewat tenggat), pengaturan kolom.
