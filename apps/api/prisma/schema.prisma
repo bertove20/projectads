@@ -49,6 +49,9 @@ model Organization {
   channels           NotificationChannel[]
   events             TrackingEvent[]
   trackingDomains    TrackingDomain[]
+  teams              Team[]
+  boards             Board[]
+  taskCards          TaskCard[]
 
   @@map("organizations")
 }
@@ -153,10 +156,17 @@ model Membership {
   status         MembershipStatus @default(ACTIVE)
   createdAt      DateTime         @default(now()) @map("created_at")
 
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role         Role                 @relation(fields: [roleId], references: [id])
-  assignments  ResourceAssignment[]
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role          Role                 @relation(fields: [roleId], references: [id])
+  assignments   ResourceAssignment[]
+  positions     MembershipPosition[]
+  teamsLed      Team[]               @relation("TeamLead")
+  teams         TeamMember[]
+  ownedCards    TaskCard[]           @relation("TaskOwner")
+  assignedCards TaskAssignee[]
+  timeEntries   TaskTimeEntry[]
+  savedViews    SavedView[]
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -351,6 +361,7 @@ model NetworkAccount {
   stats        NetworkStatDaily[]
   syncRuns     SyncRun[]
   zoneLists    ZoneListEntry[]
+  taskCards    TaskCard[]
 
   @@index([organizationId])
   @@map("network_accounts")
@@ -445,6 +456,7 @@ model Campaign {
   spendEntries   SpendEntry[]
   zoneLists      ZoneListEntry[]
   routes         CampaignRoute[]
+  taskCards      TaskCard[]
   trackingDomain TrackingDomain? @relation(fields: [trackingDomainId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status])
@@ -800,6 +812,7 @@ model Alert {
 
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   deliveries   NotificationDelivery[]
+  taskCard     TaskCard?
 
   @@unique([organizationId, dedupeKey])
   @@index([organizationId, status, createdAt])
@@ -968,4 +981,305 @@ model TrackingDomain {
 
   @@index([organizationId])
   @@map("tracking_domains")
+}
+
+// ───────────────────────────── Phase 4: tim, jabatan & Kanban ─────────────────────────────
+
+/// Jabatan kerja (read.md 19.1). Terpisah dari role sistem: role = hak akses, jabatan = fokus kerja & AI Assistant.
+enum Position {
+  ADS_MANAGER
+  MEDIA_BUYER
+  ADS_ANALYST
+  TRACKING_SPECIALIST
+  FRAUD_ANALYST
+  CREATIVE_SPECIALIST
+  LANDING_PAGE_SPECIALIST
+  AUTOMATION_SPECIALIST
+}
+
+model MembershipPosition {
+  membershipId String   @map("membership_id") @db.Uuid
+  position     Position
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, position])
+  @@index([position])
+  @@map("membership_positions")
+}
+
+model Team {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  name             String
+  description      String?
+  /// Ketua tim (anggota organisasi)
+  leadMembershipId String?  @map("lead_membership_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Membership?  @relation("TeamLead", fields: [leadMembershipId], references: [id], onDelete: SetNull)
+  members      TeamMember[]
+  boards       Board[]
+  cards        TaskCard[]
+
+  @@unique([organizationId, name])
+  @@map("teams")
+}
+
+model TeamMember {
+  teamId       String   @map("team_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  team       Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, membershipId])
+  @@index([membershipId])
+  @@map("team_members")
+}
+
+model Board {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  teamId         String?   @map("team_id") @db.Uuid
+  name           String
+  description    String?
+  /// Board operasional default organisasi (tujuan incident card otomatis)
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdById    String?   @map("created_by_id") @db.Uuid
+  archivedAt     DateTime? @map("archived_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  columns      BoardColumn[]
+  cards        TaskCard[]
+  savedViews   SavedView[]
+
+  @@index([organizationId])
+  @@map("boards")
+}
+
+/// Jenis kolom menentukan aturan kerja (mis. DONE butuh bukti penyelesaian).
+enum ColumnKind {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  REVIEW
+  WAITING_APPROVAL
+  BLOCKED
+  DONE
+  CUSTOM
+}
+
+model BoardColumn {
+  id        String     @id @default(uuid()) @db.Uuid
+  boardId   String     @map("board_id") @db.Uuid
+  name      String
+  kind      ColumnKind @default(CUSTOM)
+  position  Int
+  /// Batas kartu aktif (WIP); null = tanpa batas
+  wipLimit  Int?       @map("wip_limit")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  board Board      @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards TaskCard[]
+
+  @@index([boardId, position])
+  @@map("board_columns")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskSource {
+  MANUAL
+  ALERT
+  AI
+}
+
+model TaskCard {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.Uuid
+  /// Nomor urut per organisasi, ditampilkan sebagai T-123
+  number             Int
+  boardId            String       @map("board_id") @db.Uuid
+  columnId           String       @map("column_id") @db.Uuid
+  /// Urutan di dalam kolom (fractional, dipadatkan ulang bila celah terlalu kecil)
+  rank               Float
+  title              String
+  description        String?
+  priority           TaskPriority @default(MEDIUM)
+  ownerMembershipId  String?      @map("owner_membership_id") @db.Uuid
+  teamId             String?      @map("team_id") @db.Uuid
+  campaignId         String?      @map("campaign_id") @db.Uuid
+  networkAccountId   String?      @map("network_account_id") @db.Uuid
+  startDate          DateTime?    @map("start_date") @db.Date
+  dueDate            DateTime?    @map("due_date") @db.Date
+  /// Harus disetujui Owner/Team Leader sebelum boleh masuk kolom DONE
+  approvalRequired   Boolean      @default(false) @map("approval_required")
+  /// Bukti penyelesaian — wajib sebelum masuk kolom DONE
+  completionEvidence String?      @map("completion_evidence")
+  source             TaskSource   @default(MANUAL)
+  alertId            String?      @unique @map("alert_id") @db.Uuid
+  createdById        String?      @map("created_by_id") @db.Uuid
+  completedAt        DateTime?    @map("completed_at")
+  archivedAt         DateTime?    @map("archived_at")
+  /// Optimistic concurrency: naik setiap perubahan
+  version            Int          @default(1)
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  board          Board               @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column         BoardColumn         @relation(fields: [columnId], references: [id])
+  owner          Membership?         @relation("TaskOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+  team           Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  campaign       Campaign?           @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  networkAccount NetworkAccount?     @relation(fields: [networkAccountId], references: [id], onDelete: SetNull)
+  alert          Alert?              @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  assignees      TaskAssignee[]
+  checklist      TaskChecklistItem[]
+  comments       TaskComment[]
+  activities     TaskActivity[]
+  links          TaskLink[]
+  timeEntries    TaskTimeEntry[]
+  dependsOn      TaskDependency[]    @relation("DependentCard")
+  blocks         TaskDependency[]    @relation("BlockingCard")
+
+  @@unique([organizationId, number])
+  @@index([boardId, columnId, rank])
+  @@index([organizationId, ownerMembershipId])
+  @@index([campaignId])
+  @@index([dueDate])
+  @@map("task_cards")
+}
+
+model TaskAssignee {
+  cardId       String   @map("card_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  card       TaskCard   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, membershipId])
+  @@index([membershipId])
+  @@map("task_assignees")
+}
+
+model TaskChecklistItem {
+  id        String    @id @default(uuid()) @db.Uuid
+  cardId    String    @map("card_id") @db.Uuid
+  text      String
+  done      Boolean   @default(false)
+  position  Int
+  doneById  String?   @map("done_by_id") @db.Uuid
+  doneAt    DateTime? @map("done_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  card TaskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, position])
+  @@map("task_checklist_items")
+}
+
+model TaskComment {
+  id        String    @id @default(uuid()) @db.Uuid
+  cardId    String    @map("card_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  body      String
+  /// Membership yang di-@mention
+  mentions  String[]  @default([]) @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  editedAt  DateTime? @map("edited_at")
+
+  card TaskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, createdAt])
+  @@map("task_comments")
+}
+
+/// Timeline aktivitas kartu (append-only).
+model TaskActivity {
+  id          String   @id @default(uuid()) @db.Uuid
+  cardId      String   @map("card_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  type        String
+  data        Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  card TaskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, createdAt])
+  @@map("task_activities")
+}
+
+model TaskDependency {
+  cardId          String   @map("card_id") @db.Uuid
+  dependsOnCardId String   @map("depends_on_card_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  card      TaskCard @relation("DependentCard", fields: [cardId], references: [id], onDelete: Cascade)
+  dependsOn TaskCard @relation("BlockingCard", fields: [dependsOnCardId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, dependsOnCardId])
+  @@map("task_dependencies")
+}
+
+/// Lampiran berupa tautan (dokumen, creative, laporan). Penyimpanan file menyusul.
+model TaskLink {
+  id          String   @id @default(uuid()) @db.Uuid
+  cardId      String   @map("card_id") @db.Uuid
+  title       String
+  url         String
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  card TaskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@map("task_links")
+}
+
+model TaskTimeEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  cardId       String   @map("card_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  minutes      Int
+  note         String?
+  date         DateTime @db.Date
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  card       TaskCard   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@map("task_time_entries")
+}
+
+/// Filter tersimpan per anggota untuk board (read.md 21.6).
+model SavedView {
+  id           String   @id @default(uuid()) @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  boardId      String?  @map("board_id") @db.Uuid
+  name         String
+  filters      Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  board      Board?     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId])
+  @@map("saved_views")
 }

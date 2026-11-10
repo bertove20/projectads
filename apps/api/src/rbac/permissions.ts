@@ -28,6 +28,11 @@ export const PERMISSIONS = {
   'alerts.read': 'Melihat alert operasional',
   'alerts.manage': 'Mengakui (acknowledge) dan menutup alert',
   'notifications.manage': 'Mengelola channel notifikasi (Telegram)',
+  'tasks.read': 'Melihat board & kartu tugas',
+  'tasks.write': 'Membuat, mengubah, dan memindahkan kartu tugas',
+  'tasks.approve': 'Menyetujui kartu yang butuh approval sebelum selesai',
+  'boards.manage': 'Mengelola board & kolom Kanban',
+  'teams.manage': 'Mengelola tim dan jabatan anggota',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -44,6 +49,8 @@ const READ_BASICS: PermissionKey[] = [
   'conversions.read',
   'analytics.read',
   'alerts.read',
+  'tasks.read',
+  'tasks.write',
 ];
 
 export type SystemRoleKey =
@@ -122,7 +129,7 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
     key: 'VIEWER',
     name: 'Viewer',
     description: 'Hanya membaca laporan',
-    permissions: ['org.read', 'campaigns.read', 'analytics.read'],
+    permissions: ['org.read', 'campaigns.read', 'analytics.read', 'tasks.read'],
     isAdmin: false,
   },
 ];
