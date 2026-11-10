@@ -6,7 +6,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
-: "${ADMIN_DOMAIN:?}" "${TRACKER_DOMAIN:?}" "${POSTBACK_DOMAIN:?}" "${ACME_EMAIL:?}"
+: "${ADMIN_DOMAIN:?}" "${TRACKER_DOMAIN:?}" "${POSTBACK_DOMAIN:?}"
+# ACME_EMAIL opsional: dipakai Let's Encrypt untuk pemberitahuan sertifikat
+if [[ -n "${ACME_EMAIL:-}" ]]; then ACME_ARGS=(-m "$ACME_EMAIL"); else ACME_ARGS=(--register-unsafely-without-email); fi
 
 CONF=/etc/nginx/conf.d/eaip.conf
 WEBROOT=/var/www/eaip-acme
@@ -28,7 +30,7 @@ server {
 }
 EOF
   reload_nginx
-  certbot certonly --webroot -w "$WEBROOT" --non-interactive --agree-tos -m "$ACME_EMAIL" \
+  certbot certonly --webroot -w "$WEBROOT" --non-interactive --agree-tos "${ACME_ARGS[@]}" \
     --cert-name "$ADMIN_DOMAIN" -d "$ADMIN_DOMAIN" -d "$TRACKER_DOMAIN" -d "$POSTBACK_DOMAIN"
 fi
 
