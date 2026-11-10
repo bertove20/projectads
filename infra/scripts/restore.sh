@@ -13,7 +13,11 @@ FILE="${1:?Gunakan: restore.sh <file.dump>}"
 
 if [[ "$FILE" == *.gpg ]]; then
   DECRYPTED="${FILE%.gpg}"
-  gpg --batch --yes --output "$DECRYPTED" --decrypt "$FILE"
+  if [[ -n "${BACKUP_PASSPHRASE_FILE:-}" ]]; then
+    gpg --batch --yes --pinentry-mode loopback --passphrase-file "$BACKUP_PASSPHRASE_FILE" --output "$DECRYPTED" --decrypt "$FILE"
+  else
+    gpg --batch --yes --output "$DECRYPTED" --decrypt "$FILE"
+  fi
   FILE="$DECRYPTED"
 fi
 

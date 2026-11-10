@@ -32,8 +32,22 @@ if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
 fi
 
 if [[ -n "${BACKUP_REMOTE:-}" ]]; then
-  rclone copy "$FILE" "$BACKUP_REMOTE/" --quiet
-  echo "✓ dikirim ke $BACKUP_REMOTE"
+  UPLOAD="$FILE"
+  # Salinan offsite dienkripsi (AES-256, passphrase) — penyedia storage tidak bisa membaca isi database.
+  # Salinan lokal di VPS tetap tidak terenkripsi agar restore cepat.
+  if [[ -n "${BACKUP_PASSPHRASE_FILE:-}" && "$FILE" != *.gpg ]]; then
+    [[ -r "$BACKUP_PASSPHRASE_FILE" ]] || { echo "BACKUP_PASSPHRASE_FILE tidak terbaca: $BACKUP_PASSPHRASE_FILE" >&2; exit 1; }
+    UPLOAD="$FILE.gpg"
+    gpg --batch --yes --pinentry-mode loopback --passphrase-file "$BACKUP_PASSPHRASE_FILE" \
+      --symmetric --cipher-algo AES256 --output "$UPLOAD" "$FILE"
+  elif [[ "$FILE" != *.gpg ]]; then
+    echo "PERINGATAN: backup offsite TIDAK terenkripsi (atur BACKUP_PASSPHRASE_FILE)" >&2
+  fi
+  rclone copy "$UPLOAD" "$BACKUP_REMOTE/" --quiet
+  [[ "$UPLOAD" != "$FILE" ]] && rm -f "$UPLOAD"
+  echo "✓ dikirim ke $BACKUP_REMOTE ($(basename "$UPLOAD"))"
+  # Retensi offsite (default 30 hari)
+  rclone delete "$BACKUP_REMOTE/" --min-age "${OFFSITE_RETENTION_DAYS:-30}d" --include 'eaip-*.dump*' --quiet || true
 fi
 
 find "$BACKUP_DIR" -name 'eaip-*.dump*' -mtime +"$RETENTION_DAYS" -delete
