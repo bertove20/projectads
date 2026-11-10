@@ -52,6 +52,12 @@ model Organization {
   teams              Team[]
   boards             Board[]
   taskCards          TaskCard[]
+  aiSettings         AiSettings?
+  aiModels           AiModel[]
+  aiPositionConfigs  AiPositionConfig[]
+  aiConversations    AiConversation[]
+  aiUsageLogs        AiUsageLog[]
+  aiSkills           AiSkill[]
 
   @@map("organizations")
 }
@@ -156,17 +162,20 @@ model Membership {
   status         MembershipStatus @default(ACTIVE)
   createdAt      DateTime         @default(now()) @map("created_at")
 
-  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role          Role                 @relation(fields: [roleId], references: [id])
-  assignments   ResourceAssignment[]
-  positions     MembershipPosition[]
-  teamsLed      Team[]               @relation("TeamLead")
-  teams         TeamMember[]
-  ownedCards    TaskCard[]           @relation("TaskOwner")
-  assignedCards TaskAssignee[]
-  timeEntries   TaskTimeEntry[]
-  savedViews    SavedView[]
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role             Role                 @relation(fields: [roleId], references: [id])
+  assignments      ResourceAssignment[]
+  positions        MembershipPosition[]
+  teamsLed         Team[]               @relation("TeamLead")
+  teams            TeamMember[]
+  ownedCards       TaskCard[]           @relation("TaskOwner")
+  assignedCards    TaskAssignee[]
+  timeEntries      TaskTimeEntry[]
+  savedViews       SavedView[]
+  aiConfig         AiMemberConfig?
+  aiConversations  AiConversation[]
+  skillAssignments AiSkillAssignment[]
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -1282,4 +1291,281 @@ model SavedView {
 
   @@index([membershipId])
   @@map("saved_views")
+}
+
+// ───────────────────────────── Phase 5: AI Workspace & Skill Library ─────────────────────────────
+
+/// Pengaturan AI per organisasi. API key OpenRouter disimpan terenkripsi dan tidak pernah dikirim ke browser.
+model AiSettings {
+  organizationId    String    @id @map("organization_id") @db.Uuid
+  enabled           Boolean   @default(false)
+  /// AES-256-GCM (CryptoService)
+  apiKeyCiphertext  String?   @map("api_key_ciphertext")
+  apiKeyHint        String?   @map("api_key_hint")
+  apiKeyValidatedAt DateTime? @map("api_key_validated_at")
+  /// Batas biaya seluruh organisasi per bulan (USD); null = tanpa batas
+  monthlyBudgetUsd  Decimal?  @map("monthly_budget_usd") @db.Decimal(12, 4)
+  /// Riwayat percakapan dihapus setelah N hari
+  retentionDays     Int       @default(90) @map("retention_days")
+  modelsSyncedAt    DateTime? @map("models_synced_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_settings")
+}
+
+/// Model registry: diambil dari OpenRouter, admin memilih yang boleh dipakai. Tidak ada nama model yang di-hardcode.
+model AiModel {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  /// ID model OpenRouter, mis. "vendor/nama-model"
+  modelId             String   @map("model_id")
+  name                String
+  contextLength       Int?     @map("context_length")
+  maxCompletionTokens Int?     @map("max_completion_tokens")
+  /// USD per token (satuan OpenRouter)
+  promptPrice         Decimal  @map("prompt_price") @db.Decimal(20, 12)
+  completionPrice     Decimal  @map("completion_price") @db.Decimal(20, 12)
+  supportsTools       Boolean  @default(false) @map("supports_tools")
+  /// Diizinkan admin untuk dipakai
+  enabled             Boolean  @default(false)
+  /// Masih tercantum di OpenRouter pada sinkronisasi terakhir
+  available           Boolean  @default(true)
+  lastValidatedAt     DateTime @default(now()) @map("last_validated_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  positionDefaults  AiPositionConfig[] @relation("PositionModel")
+  positionFallbacks AiPositionConfig[] @relation("PositionFallback")
+  memberModels      AiMemberConfig[]   @relation("MemberModel")
+  memberFallbacks   AiMemberConfig[]   @relation("MemberFallback")
+
+  @@unique([organizationId, modelId])
+  @@map("ai_models")
+}
+
+/// Default AI Assistant per jabatan.
+model AiPositionConfig {
+  organizationId   String   @map("organization_id") @db.Uuid
+  position         Position
+  modelId          String?  @map("model_id") @db.Uuid
+  fallbackModelId  String?  @map("fallback_model_id") @db.Uuid
+  temperature      Float    @default(0.3)
+  maxTokens        Int      @default(1200) @map("max_tokens")
+  dailyBudgetUsd   Decimal? @map("daily_budget_usd") @db.Decimal(12, 4)
+  monthlyBudgetUsd Decimal? @map("monthly_budget_usd") @db.Decimal(12, 4)
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  model        AiModel?     @relation("PositionModel", fields: [modelId], references: [id], onDelete: SetNull)
+  fallback     AiModel?     @relation("PositionFallback", fields: [fallbackModelId], references: [id], onDelete: SetNull)
+
+  @@id([organizationId, position])
+  @@map("ai_position_configs")
+}
+
+/// Override per karyawan (model, budget, batas request). Field null = ikut default jabatan.
+model AiMemberConfig {
+  membershipId      String   @id @map("membership_id") @db.Uuid
+  aiEnabled         Boolean  @default(true) @map("ai_enabled")
+  modelId           String?  @map("model_id") @db.Uuid
+  fallbackModelId   String?  @map("fallback_model_id") @db.Uuid
+  temperature       Float?
+  maxTokens         Int?     @map("max_tokens")
+  dailyBudgetUsd    Decimal? @map("daily_budget_usd") @db.Decimal(12, 4)
+  monthlyBudgetUsd  Decimal? @map("monthly_budget_usd") @db.Decimal(12, 4)
+  maxRequestsPerDay Int?     @map("max_requests_per_day")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  model      AiModel?   @relation("MemberModel", fields: [modelId], references: [id], onDelete: SetNull)
+  fallback   AiModel?   @relation("MemberFallback", fields: [fallbackModelId], references: [id], onDelete: SetNull)
+
+  @@map("ai_member_configs")
+}
+
+model AiConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  membershipId   String   @map("membership_id") @db.Uuid
+  position       Position
+  title          String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership   Membership    @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  messages     AiMessage[]
+  drafts       AiTaskDraft[]
+
+  @@index([membershipId, updatedAt])
+  @@map("ai_conversations")
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model AiMessage {
+  id             String        @id @default(uuid()) @db.Uuid
+  conversationId String        @map("conversation_id") @db.Uuid
+  role           AiMessageRole
+  content        String
+  /// Untuk ASSISTANT: tool_calls dari model; untuk TOOL: nama tool & id panggilan
+  toolCalls      Json?         @map("tool_calls")
+  toolCallId     String?       @map("tool_call_id")
+  toolName       String?       @map("tool_name")
+  /// Skill yang aktif saat pesan ini dibuat
+  skillKeys      String[]      @default([]) @map("skill_keys")
+  modelId        String?       @map("model_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+enum AiUsageStatus {
+  OK
+  ERROR
+  BLOCKED
+}
+
+/// Log setiap request ke model: token, biaya estimasi & aktual (read.md H, 19.2).
+model AiUsageLog {
+  id               String        @id @default(uuid()) @db.Uuid
+  organizationId   String        @map("organization_id") @db.Uuid
+  membershipId     String?       @map("membership_id") @db.Uuid
+  conversationId   String?       @map("conversation_id") @db.Uuid
+  position         Position?
+  modelId          String        @map("model_id")
+  usedFallback     Boolean       @default(false) @map("used_fallback")
+  promptTokens     Int           @default(0) @map("prompt_tokens")
+  completionTokens Int           @default(0) @map("completion_tokens")
+  estimatedCostUsd Decimal       @default(0) @map("estimated_cost_usd") @db.Decimal(14, 8)
+  costUsd          Decimal       @default(0) @map("cost_usd") @db.Decimal(14, 8)
+  status           AiUsageStatus
+  error            String?
+  latencyMs        Int?          @map("latency_ms")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([membershipId, createdAt])
+  @@map("ai_usage_logs")
+}
+
+enum SkillRisk {
+  READ_ONLY
+  DRAFT
+  WRITE
+}
+
+enum SkillSource {
+  BUILTIN
+  CUSTOM
+  IMPORTED
+}
+
+enum SkillReview {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// Skill Library (read.md 19.3). Isi skill (SKILL.md) berversi; versi baru wajib direview sebelum aktif.
+model AiSkill {
+  id              String      @id @default(uuid()) @db.Uuid
+  organizationId  String      @map("organization_id") @db.Uuid
+  key             String
+  name            String
+  description     String
+  category        String
+  positions       Position[]
+  riskClass       SkillRisk   @default(READ_ONLY) @map("risk_class")
+  /// Nama tool server-side yang boleh dipakai skill ini
+  tools           String[]
+  enabled         Boolean     @default(true)
+  source          SkillSource @default(CUSTOM)
+  /// Versi yang sedang dipakai AI Assistant (selalu versi yang sudah disetujui)
+  activeVersionId String?     @unique @map("active_version_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activeVersion AiSkillVersion?     @relation("ActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions      AiSkillVersion[]    @relation("SkillVersions")
+  assignments   AiSkillAssignment[]
+
+  @@unique([organizationId, key])
+  @@map("ai_skills")
+}
+
+model AiSkillVersion {
+  id           String      @id @default(uuid()) @db.Uuid
+  skillId      String      @map("skill_id") @db.Uuid
+  version      Int
+  skillMd      String      @map("skill_md")
+  /// [{ input, expect: { mustInclude?: string[], tools?: string[] } }]
+  testCases    Json?       @map("test_cases")
+  changelog    String?
+  review       SkillReview @default(PENDING_REVIEW)
+  createdById  String?     @map("created_by_id") @db.Uuid
+  reviewedById String?     @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?   @map("reviewed_at")
+  reviewNote   String?     @map("review_note")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  skill     AiSkill  @relation("SkillVersions", fields: [skillId], references: [id], onDelete: Cascade)
+  activeFor AiSkill? @relation("ActiveVersion")
+
+  @@unique([skillId, version])
+  @@map("ai_skill_versions")
+}
+
+/// Override skill per karyawan: aktifkan skill di luar jabatannya, atau nonaktifkan skill jabatannya.
+model AiSkillAssignment {
+  skillId      String   @map("skill_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  enabled      Boolean
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  skill      AiSkill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@id([skillId, membershipId])
+  @@map("ai_skill_assignments")
+}
+
+enum DraftStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+}
+
+/// Draft task card usulan AI — baru menjadi kartu setelah karyawan menyetujuinya (read.md 19.2 langkah 7–8).
+model AiTaskDraft {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  membershipId   String       @map("membership_id") @db.Uuid
+  title          String
+  description    String?
+  priority       TaskPriority @default(MEDIUM)
+  campaignId     String?      @map("campaign_id") @db.Uuid
+  dueDate        DateTime?    @map("due_date") @db.Date
+  status         DraftStatus  @default(PENDING)
+  cardId         String?      @map("card_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  decidedAt      DateTime?    @map("decided_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, status])
+  @@map("ai_task_drafts")
 }

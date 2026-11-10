@@ -65,6 +65,9 @@ const schema = z.object({
   PROPELLERADS_API_BASE: z.string().url().default('https://ssp-api.propellerads.com/v5'),
   /** Base URL Telegram Bot API. Diubah hanya untuk mock lokal. */
   TELEGRAM_API_BASE: z.string().url().default('https://api.telegram.org'),
+  OPENROUTER_API_BASE: z.string().url().default('https://openrouter.ai/api/v1'),
+  /** Batas waktu satu request ke model (ms) */
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(300000).default(90000),
   /** Interval sinkronisasi statistik jaringan (menit). */
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(15).default(60),
   /** Jumlah hari ke belakang yang disinkronkan ulang untuk menangkap data terlambat. */

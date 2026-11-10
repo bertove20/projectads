@@ -33,6 +33,9 @@ export const PERMISSIONS = {
   'tasks.approve': 'Menyetujui kartu yang butuh approval sebelum selesai',
   'boards.manage': 'Mengelola board & kolom Kanban',
   'teams.manage': 'Mengelola tim dan jabatan anggota',
+  'ai.use': 'Memakai AI Assistant sesuai jabatan',
+  'ai.manage': 'Mengatur model AI, budget, dan skill',
+  'ai.credentials': 'Mengatur API key OpenRouter organisasi',
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -51,6 +54,7 @@ const READ_BASICS: PermissionKey[] = [
   'alerts.read',
   'tasks.read',
   'tasks.write',
+  'ai.use',
 ];
 
 export type SystemRoleKey =
@@ -84,7 +88,7 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
     key: 'TEAM_LEADER',
     name: 'Team Leader',
     description: 'Mengelola tim, campaign, dan melihat seluruh laporan',
-    permissions: ALL_PERMISSIONS.filter((p) => !['org.manage', 'roles.manage', 'networks.credentials'].includes(p)),
+    permissions: ALL_PERMISSIONS.filter((p) => !['org.manage', 'roles.manage', 'networks.credentials', 'ai.credentials'].includes(p)),
     isAdmin: false,
   },
   {
