@@ -22,6 +22,7 @@ import {
 import { ENV, Env } from '../config/env';
 import { API_SUPPORTED_NETWORKS, NetworkSyncService } from '../networks/network-sync.service';
 import { DeliveryService } from '../postbacks/delivery.service';
+import { DomainsService } from '../domains/domains.service';
 
 const SWEEP_EVERY_MS = 60_000;
 const DRAIN_BATCH = 500;
@@ -45,6 +46,7 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
     private readonly networkSync: NetworkSyncService,
     private readonly notifications: NotificationService,
     private readonly alerts: AlertService,
+    private readonly domains: DomainsService,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(POSTBACK_QUEUE) private readonly postbackQueue: Queue<PostbackJob>,
     @Inject(NETWORK_SYNC_QUEUE) private readonly syncQueue: Queue<NetworkSyncJob>,
@@ -86,9 +88,10 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
     this.maintenance = new Queue(QUEUE_MAINTENANCE, { connection: this.redis });
     await this.maintenance.upsertJobScheduler('sweep', { every: SWEEP_EVERY_MS }, { name: 'sweep' });
     await this.maintenance.upsertJobScheduler('schedule-syncs', { every: this.env.SYNC_INTERVAL_MINUTES * 60_000 }, { name: 'schedule-syncs' });
+    await this.maintenance.upsertJobScheduler('verify-domains', { every: 6 * 3600_000 }, { name: 'verify-domains' });
     const maintenanceWorker = new Worker(
       QUEUE_MAINTENANCE,
-      async (job) => (job.name === 'schedule-syncs' ? this.scheduleSyncs() : this.sweep()),
+      async (job) => (job.name === 'schedule-syncs' ? this.scheduleSyncs() : job.name === 'verify-domains' ? this.verifyDomains() : this.sweep()),
       { connection: this.conn(), concurrency: 1 },
     );
 
@@ -106,6 +109,27 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
       await this.syncQueue.add('sync', { networkAccountId: a.id, trigger: 'schedule' }, { jobId: `sched:${a.id}:${slot}`, attempts: 3, backoff: { type: 'exponential', delay: 120_000 }, removeOnComplete: 500, removeOnFail: 500 });
     }
     if (accounts.length) this.logger.log({ accounts: accounts.length }, 'Sinkronisasi dijadwalkan');
+  }
+
+  /** Verifikasi ulang domain ACTIVE/FAILED; domain yang tidak lagi mengarah ke platform → FAILED + alert. */
+  async verifyDomains() {
+    const rows = await this.prisma.trackingDomain.findMany({ where: { status: { in: ['ACTIVE', 'FAILED'] } }, select: { id: true, organizationId: true, hostname: true, status: true } });
+    for (const d of rows) {
+      const { status, check } = await this.domains.verify(d.id);
+      if (d.status === 'ACTIVE' && status === 'FAILED') {
+        await this.alerts.raise({
+          organizationId: d.organizationId,
+          type: 'DOMAIN_DNS_FAILED',
+          severity: 'HIGH',
+          title: `Domain tracking ${d.hostname} tidak lagi mengarah ke platform`,
+          body: `${check.detail}. Tracking link campaign yang memakai domain ini dialihkan ke domain tracking utama; perbaiki DNS lalu verifikasi ulang di menu Domain.`,
+          dedupeKey: `domain-dns:${d.id}`,
+          entityType: 'tracking_domain',
+          entityId: d.id,
+        });
+      }
+    }
+    if (rows.length) this.logger.log({ checked: rows.length }, 'Verifikasi domain selesai');
   }
 
   private async alertDeadPostback(deliveryId: string, reason: string) {

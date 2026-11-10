@@ -64,6 +64,17 @@ Spesifikasi lengkap: [read.md](read.md). Roadmap: read.md bagian 17.6. Riwayat p
 | Adapter PropellerAds (Propeller SSP API v5): token, daftar campaign, statistik & spend per zone (UTC) | ✅ diuji dengan mock dari spesifikasi resmi |
 | Adapter Clickadu / EvaDav | ⏳ menunggu dokumentasi API resmi dari account manager |
 
+## Domain
+
+| Domain | Isi yang dibuka Caddy |
+|---|---|
+| `ADMIN_DOMAIN` (admin.trkads.org) | Dashboard + `/api/*` |
+| `TRACKER_DOMAIN` (trk.trkads.org) | `/c/*`, `/click-out`, `/sdk.js`, `/e` saja |
+| `POSTBACK_DOMAIN` (pb.trkads.org) | `/postback/in/*` saja |
+| Domain kustom (menu Domain) | Sama dengan tracking; HTTPS on-demand hanya setelah DNS terverifikasi |
+
+Domain kustom diverifikasi lewat CNAME (atau A record sama dengan IP tracking), diperiksa ulang tiap 6 jam; bila DNS berubah, status jadi FAILED, sertifikat tidak diperpanjang, dan campaign kembali ke domain tracking platform.
+
 Uji SDK di browser: `npx playwright install chromium` (sekali), lalu `ADMIN_MFA_SECRET=… node apps/api/test/sdk.browser.mjs` (butuh stack lokal + `npm run dev:dashboard`).
 
 ## Menjalankan stack lengkap secara lokal (Docker Desktop)
@@ -140,7 +151,11 @@ sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw allow 443/udp &&
 # 3. Kode & konfigurasi
 git clone <repo> /opt/eaip && cd /opt/eaip/infra
 cp .env.example .env && chmod 600 .env     # isi semua nilai GANTI_…
-# 4. DNS: A record ADMIN_DOMAIN dan TRACKER_DOMAIN → IP VPS
+# 4. DNS: tiga A record → IP VPS
+#      admin.trkads.org  (ADMIN_DOMAIN)    login & dashboard — jangan dibagikan ke luar
+#      trk.trkads.org    (TRACKER_DOMAIN)  tracking link, click-out, JS SDK
+#      pb.trkads.org     (POSTBACK_DOMAIN) postback dari affiliate network
+#    Domain tracking kustom (opsional) ditambahkan dari menu Domain: CNAME go.brand.com → trk.trkads.org
 # 5. Jalankan
 docker compose --env-file .env up -d --build
 docker compose ps

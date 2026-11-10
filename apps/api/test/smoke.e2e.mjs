@@ -476,6 +476,64 @@ async function main() {
   const cTok = await admin.put(`/network-accounts/${clickaduNet.body.id}/api-token`, { token: 'apa-saja-12345' });
   check('jaringan tanpa dokumentasi terverifikasi (Clickadu) menolak integrasi API', cTok.status === 400 && cTok.body?.error?.code === 'API_NOT_SUPPORTED', cTok);
 
+  console.log('\n[20] Manajemen domain tracking');
+  const askKey = (() => {
+    try {
+      const envLocal = require('fs').readFileSync(new URL('../../../infra/.env.local', import.meta.url), 'utf8');
+      return envLocal.match(/^INTERNAL_ASK_KEY=(.+)$/m)?.[1]?.trim() ?? '';
+    } catch {
+      return process.env.INTERNAL_ASK_KEY ?? '';
+    }
+  })();
+  const okHost = `go-${RUN}.e2e-ok.example`;
+  const badHost = `x-${RUN}.e2e-bad.example`;
+  const platform = (await admin.get('/domains')).body?.platform;
+  check('GET /domains menampilkan host platform (admin, tracking, postback)', !!platform?.trackerHost && !!platform?.postbackHost && !!platform?.adminHost, platform);
+  const reserved = await admin.post('/domains', { hostname: platform.trackerHost });
+  check('domain platform tidak bisa didaftarkan', reserved.status === 400 && reserved.body?.error?.code === 'RESERVED_HOSTNAME', reserved);
+  const invalidHost = await admin.post('/domains', { hostname: 'bukan domain!' });
+  check('format domain tidak valid ditolak', invalidHost.status === 400 && invalidHost.body?.error?.code === 'BAD_HOSTNAME', invalidHost);
+  const dOk = await admin.post('/domains', { hostname: okHost.toUpperCase(), websiteId: site.body.id });
+  check('domain dengan CNAME benar langsung ACTIVE (+ instruksi DNS)', dOk.status === 201 && dOk.body.status === 'ACTIVE' && dOk.body.hostname === okHost && dOk.body.dns?.type === 'CNAME', dOk.body);
+  const dBad = await admin.post('/domains', { hostname: badHost });
+  check('domain dengan CNAME salah tetap PENDING + alasan', dBad.status === 201 && dBad.body.status === 'PENDING' && dBad.body.lastError?.includes('seharusnya'), dBad.body);
+  const dDup = await admin.post('/domains', { hostname: okHost });
+  check('domain yang sama tidak bisa didaftarkan dua kali', dDup.status === 400 && dDup.body?.error?.code === 'HOSTNAME_TAKEN', dDup);
+  const reVerify = await admin.post(`/domains/${dBad.body.id}/verify`);
+  check('verifikasi ulang memberi detail DNS', reVerify.status === 200 && reVerify.body.status === 'PENDING' && !!reVerify.body.detail, reVerify.body);
+  const campBadDomain = await admin.patch(`/campaigns/${camp.body.id}`, { trackingDomainId: dBad.body.id });
+  check('campaign tidak bisa memakai domain yang belum terverifikasi', campBadDomain.status === 400 && campBadDomain.body?.error?.code === 'DOMAIN_NOT_ACTIVE', campBadDomain);
+  const campDomain = await admin.patch(`/campaigns/${camp.body.id}`, { trackingDomainId: dOk.body.id });
+  const campView = await admin.get(`/campaigns/${camp.body.id}`);
+  check('tracking link campaign memakai domain kustom (HTTPS)', campDomain.status === 200 && campView.body.trackingLink?.base === `https://${okHost}/c/${token}`, campView.body.trackingLink);
+  const ask = (domain, key = askKey) => fetch(`${TRK}/internal/tls-allowed?domain=${encodeURIComponent(domain)}${key ? `&key=${key}` : ''}`).then((r) => r.status);
+  check('Caddy ask: sertifikat diizinkan untuk domain ACTIVE', (await ask(okHost)) === 200);
+  check('Caddy ask: ditolak untuk domain PENDING / tak dikenal', (await ask(badHost)) === 404 && (await ask('random.example.org')) === 404);
+  if (askKey) check('Caddy ask: tanpa kunci internal → 403', (await ask(okHost, 'kunci-salah-kunci-salah')) === 403);
+  // Simulasi request yang datang lewat domain kustom (header Host diganti; fetch bawaan tidak mengizinkan)
+  const rawGet = (path, headers) =>
+    new Promise((resolve, reject) => {
+      const u = new URL(TRK + path);
+      require('http').get({ hostname: u.hostname, port: u.port, path: u.pathname + u.search, headers }, (res) => {
+        let body = '';
+        res.on('data', (c) => (body += c));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+      }).on('error', reject);
+    });
+  const viaCustom = await rawGet(`/c/${token}?click_id=DOM-${RUN}`, { host: okHost, 'user-agent': BROWSER_UA, 'accept-language': 'id' });
+  check('klik lewat domain kustom tetap ter-redirect', viaCustom.status === 302 && !!viaCustom.headers.location, viaCustom.status);
+  const sdkCustom = (await rawGet(`/sdk.js?k=${sdkKey}`, { host: okHost })).body;
+  check('JS SDK yang dimuat dari domain kustom mengirim event ke domain yang sama', sdkCustom.includes(`${okHost}/e`), sdkCustom.match(/"endpoint":"[^"]+"/)?.[0]);
+  const sites = await admin.get('/websites');
+  check('snippet SDK website memakai domain kustom miliknya', sites.body.find((w) => w.id === site.body.id)?.sdkSnippet?.includes(`https://${okHost}/sdk.js`), sites.body.find((w) => w.id === site.body.id)?.sdkSnippet);
+  const delInUse = await admin.req('DELETE', `/domains/${dOk.body.id}`);
+  check('domain yang masih dipakai campaign tidak bisa dihapus', delInUse.status === 400 && delInUse.body?.error?.code === 'DOMAIN_IN_USE', delInUse);
+  await admin.patch(`/campaigns/${camp.body.id}`, { trackingDomainId: null });
+  const delOk = await admin.req('DELETE', `/domains/${dBad.body.id}`);
+  check('domain yang tidak dipakai bisa dihapus', delOk.status === 200, delOk);
+  const bDom = await buyer.post('/domains', { hostname: `b-${RUN}.e2e-ok.example` });
+  check('Media Buyer tidak bisa mengelola domain', bDom.status === 403, bDom.status);
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;

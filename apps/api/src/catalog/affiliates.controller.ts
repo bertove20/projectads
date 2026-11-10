@@ -20,6 +20,7 @@ import { CryptoService } from '../common/crypto/crypto.service';
 import { AuthUser, CurrentUser, Org, OrgContext, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertFullScope, notFound } from '../common/scope';
+import { postbackBase } from '../common/public-urls';
 import { isHttpUrl } from '../common/url';
 import { ENV, Env } from '../config/env';
 import { INBOUND_FIELDS, normalizeMapping } from '../postbacks/mapping';
@@ -73,7 +74,7 @@ export class AffiliatesController {
   ) {}
 
   private inboundUrl(token: string) {
-    return `${this.env.TRACKER_PUBLIC_URL}/postback/in/${token}?click_id={click_id}&payout={payout}&status={status}&txid={txid}`;
+    return `${postbackBase(this.env)}/postback/in/${token}?click_id={click_id}&payout={payout}&status={status}&txid={txid}`;
   }
 
   @Get('affiliate-networks')

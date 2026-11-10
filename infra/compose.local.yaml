@@ -9,6 +9,8 @@ x-mocks: &mocks
   PROPELLERADS_API_BASE: http://mock-network:4900/propeller/v5
   TELEGRAM_API_BASE: http://mock-network:4900/telegram
   RECON_MIN_CLICKS: "50"
+  # DNS tiruan untuk menguji verifikasi domain kustom (tidak ada di VPS)
+  DNS_TEST_OVERRIDES: '{"*.e2e-ok.example":"cname:localhost","*.e2e-bad.example":"cname:elsewhere.example"}'
 
 services:
   reverse-proxy:

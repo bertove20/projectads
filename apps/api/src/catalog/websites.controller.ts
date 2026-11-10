@@ -5,6 +5,7 @@ import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID,
 import { Website } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { ENV, Env } from '../config/env';
+import { customDomainBase, trackerBase } from '../common/public-urls';
 import { AuditService } from '../common/audit/audit.service';
 import { AuthUser, CurrentUser, Org, OrgContext, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -46,10 +47,14 @@ export class WebsitesController {
   ) {}
 
   /** Website + potongan kode pemasangan JS SDK (sdkKey bersifat publik, bukan rahasia). */
-  private withSdk(w: Website) {
-    const base = this.env.TRACKER_PUBLIC_URL.replace(/\/$/, '');
+  private withSdk(w: Website & { trackingDomains?: Array<{ hostname: string; status: string }> }) {
+    // Domain tracking kustom milik website (first-party) dipakai bila ACTIVE: lebih jarang diblokir ad blocker
+    const own = w.trackingDomains?.find((d) => d.status === 'ACTIVE');
+    const base = own ? customDomainBase(own.hostname) : trackerBase(this.env);
+    const { trackingDomains: _domains, ...rest } = w;
     return {
-      ...w,
+      ...rest,
+      sdkHost: new URL(base).host,
       sdkSnippet: w.sdkKey
         ? [
             '<script>window.eaip=window.eaip||function(){(window.eaipq=window.eaipq||[]).push(arguments)}</script>',
@@ -62,7 +67,11 @@ export class WebsitesController {
   @Get('websites')
   @RequirePermissions('websites.read')
   async list(@Org() org: OrgContext) {
-    const rows = await this.prisma.website.findMany({ where: { organizationId: org.organizationId }, orderBy: { createdAt: 'desc' } });
+    const rows = await this.prisma.website.findMany({
+      where: { organizationId: org.organizationId },
+      include: { trackingDomains: { select: { hostname: true, status: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
     return rows.map((w) => this.withSdk(w));
   }
 
@@ -74,7 +83,11 @@ export class WebsitesController {
     assertFullScope(org);
     const w = await this.prisma.website.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!w) notFound('Website');
-    const after = await this.prisma.website.update({ where: { id }, data: { sdkKey: randomBytes(18).toString('base64url') } });
+    const after = await this.prisma.website.update({
+      where: { id },
+      data: { sdkKey: randomBytes(18).toString('base64url') },
+      include: { trackingDomains: { select: { hostname: true, status: true } } },
+    });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: w.sdkKey ? 'website.sdk_key_rotate' : 'website.sdk_key_create', entityType: 'website', entityId: id });
     return this.withSdk(after);
   }
@@ -97,6 +110,7 @@ export class WebsitesController {
     const after = await this.prisma.website.update({
       where: { id },
       data: { ...dto, extraDomains: dto.extraDomains ? [...new Set(dto.extraDomains.map((d) => d.toLowerCase()))] : undefined },
+      include: { trackingDomains: { select: { hostname: true, status: true } } },
     });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'website.update', entityType: 'website', entityId: id, before, after });
     return this.withSdk(after);

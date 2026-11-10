@@ -5,6 +5,8 @@ import { Inject } from '@nestjs/common';
 import { ENV, Env } from '../config/env';
 import { EventsService } from './events.service';
 import { sdkScript } from './sdk-source';
+import { trackerBase, trackerHost } from '../common/public-urls';
+import { DomainsService } from '../domains/domains.service';
 
 /**
  * JS SDK di domain tracking:
@@ -16,11 +18,12 @@ import { sdkScript } from './sdk-source';
 export class SdkController {
   constructor(
     private readonly events: EventsService,
+    private readonly domains: DomainsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
   @Get('sdk.js')
-  async script(@Query('k') key: string | undefined, @Res() res: Response) {
+  async script(@Query('k') key: string | undefined, @Req() req: Request, @Res() res: Response) {
     const site = key ? await this.events.site(key) : null;
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -32,7 +35,11 @@ export class SdkController {
       return;
     }
     res.setHeader('Cache-Control', 'public, max-age=300');
-    const base = this.env.TRACKER_PUBLIC_URL.replace(/\/$/, '');
+    // SDK mengirim event ke domain tempat ia dimuat (domain kustom first-party bila ACTIVE)
+    const host = req.hostname?.toLowerCase();
+    const sameHost = host && (host === trackerHost(this.env) || (await this.domains.isAllowedForTls(host)));
+    const base = sameHost ? `${req.protocol}://${req.get('host')}` : trackerBase(this.env);
+    res.setHeader('Vary', 'Host');
     res.send(sdkScript({ key: key!, endpoint: `${base}/e`, clickOut: `${base}/click-out`, requireConsent: site.requireConsent }));
   }
 

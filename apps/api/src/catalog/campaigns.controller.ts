@@ -7,6 +7,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { AuthUser, CurrentUser, Org, OrgContext, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertCampaignAccess, campaignScope, notFound } from '../common/scope';
+import { customDomainBase, trackerBase } from '../common/public-urls';
 import { isHttpUrl } from '../common/url';
 import { ENV, Env } from '../config/env';
 import { CLICK_FIELDS, readMapping } from '../postbacks/mapping';
@@ -25,6 +26,8 @@ class CampaignDto {
   @IsOptional() @IsUUID() offerId?: string;
   @IsOptional() @IsUUID() landingPageId?: string;
   @IsOptional() @IsString() @MaxLength(2048) fallbackUrl?: string;
+  /** Domain tracking kustom (status ACTIVE); null = domain tracking utama */
+  @IsOptional() @IsUUID() trackingDomainId?: string | null;
   @IsOptional() @Matches(/^[a-z0-9_-]{1,50}$/) conversionGoal?: string;
   @IsOptional() @IsBoolean() postbackEnabled?: boolean;
 }
@@ -40,6 +43,8 @@ class UpdateCampaignDto {
   @IsOptional() @IsUUID() offerId?: string;
   @IsOptional() @IsUUID() landingPageId?: string;
   @IsOptional() @IsString() @MaxLength(2048) fallbackUrl?: string;
+  /** Domain tracking kustom (status ACTIVE); null = domain tracking utama */
+  @IsOptional() @IsUUID() trackingDomainId?: string | null;
   @IsOptional() @Matches(/^[a-z0-9_-]{1,50}$/) conversionGoal?: string;
   @IsOptional() @IsBoolean() postbackEnabled?: boolean;
   @IsOptional() @IsEnum(ActiveStatus) status?: ActiveStatus;
@@ -62,7 +67,9 @@ export class CampaignsController {
   ) {}
 
   /** Contoh tracking link. Ganti [MACRO_...] dengan macro resmi jaringan iklan (lihat dokumentasi jaringan). */
-  private trackingLink(c: Campaign, acc: Pick<NetworkAccount, 'paramMapping'>) {
+  private trackingLink(c: Campaign, acc: Pick<NetworkAccount, 'paramMapping'>, domain?: { hostname: string; status: string } | null) {
+    // Domain kustom hanya dipakai bila masih ACTIVE; selain itu kembali ke domain tracking utama
+    const base = domain && domain.status === 'ACTIVE' ? customDomainBase(domain.hostname) : trackerBase(this.env);
     const m = readMapping(acc.paramMapping, CLICK_FIELDS);
     const params = [
       `${m.externalClickId}=[MACRO_CLICK_ID]`,
@@ -71,9 +78,10 @@ export class CampaignsController {
       `${m.cost}=[MACRO_COST]`,
     ];
     return {
-      base: `${this.env.TRACKER_PUBLIC_URL}/c/${c.token}`,
-      example: `${this.env.TRACKER_PUBLIC_URL}/c/${c.token}?${params.join('&')}`,
-      clickOut: `${this.env.TRACKER_PUBLIC_URL}/click-out?cid={cid}`,
+      base: `${base}/c/${c.token}`,
+      example: `${base}/c/${c.token}?${params.join('&')}`,
+      clickOut: `${base}/click-out?cid={cid}`,
+      domain: domain ? { hostname: domain.hostname, status: domain.status } : null,
     };
   }
 
@@ -96,14 +104,14 @@ export class CampaignsController {
   async get(@Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
     const c = await this.prisma.campaign.findFirst({
       where: { AND: [campaignScope(org), { id }] },
-      include: { networkAccount: true, offer: true, landingPage: true },
+      include: { networkAccount: true, offer: true, landingPage: true, trackingDomain: { select: { id: true, hostname: true, status: true } } },
     });
     if (!c) notFound('Campaign');
     const { networkAccount, ...rest } = c;
     return {
       ...rest,
       networkAccount: { id: networkAccount.id, name: networkAccount.name, network: networkAccount.network, testMode: networkAccount.testMode, postbackConfigured: networkAccount.postbackConfigured },
-      trackingLink: this.trackingLink(c, networkAccount),
+      trackingLink: this.trackingLink(c, networkAccount, c.trackingDomain),
     };
   }
 
@@ -113,6 +121,7 @@ export class CampaignsController {
     const acc = await this.prisma.networkAccount.findFirst({ where: { id: dto.networkAccountId, organizationId: org.organizationId } });
     if (!acc) notFound('Akun jaringan');
     await this.validateTargets(org.organizationId, dto.flowType, dto.offerId, dto.landingPageId, dto.fallbackUrl);
+    const domain = await this.validateDomain(org.organizationId, dto.trackingDomainId);
 
     const isCpaGoal = CPA_GOAL.includes(dto.bidModel);
     const c = await this.prisma.$transaction(async (tx) => {
@@ -133,6 +142,7 @@ export class CampaignsController {
           offerId: dto.offerId,
           landingPageId: dto.landingPageId,
           fallbackUrl: dto.fallbackUrl,
+          trackingDomainId: dto.trackingDomainId ?? null,
           conversionGoal: dto.conversionGoal,
           postbackEnabled: isCpaGoal ? true : (dto.postbackEnabled ?? false),
           status: 'PAUSED',
@@ -145,7 +155,7 @@ export class CampaignsController {
       await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'campaign.create', entityType: 'campaign', entityId: created.id, after: created }, tx);
       return created;
     });
-    return { ...c, trackingLink: this.trackingLink(c, acc) };
+    return { ...c, trackingLink: this.trackingLink(c, acc, domain) };
   }
 
   @Patch(':id')
@@ -159,6 +169,7 @@ export class CampaignsController {
     const offerId = dto.offerId ?? before.offerId ?? undefined;
     const landingPageId = dto.landingPageId ?? before.landingPageId ?? undefined;
     await this.validateTargets(org.organizationId, flowType, offerId, landingPageId, dto.fallbackUrl);
+    if (dto.trackingDomainId) await this.validateDomain(org.organizationId, dto.trackingDomainId);
 
     const bidModel = dto.bidModel ?? before.bidModel;
     const isCpaGoal = CPA_GOAL.includes(bidModel);
@@ -179,6 +190,15 @@ export class CampaignsController {
     });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'campaign.update', entityType: 'campaign', entityId: id, before: { ...before, networkAccount: undefined }, after });
     return after;
+  }
+
+  /** Domain kustom harus milik organisasi dan sudah ACTIVE (DNS terverifikasi). */
+  private async validateDomain(orgId: string, domainId: string | null | undefined) {
+    if (!domainId) return null;
+    const d = await this.prisma.trackingDomain.findFirst({ where: { id: domainId, organizationId: orgId } });
+    if (!d) notFound('Domain tracking');
+    if (d.status !== 'ACTIVE') throw new BadRequestException({ code: 'DOMAIN_NOT_ACTIVE', message: `Domain ${d.hostname} belum terverifikasi. Arahkan DNS-nya lalu klik Verifikasi di menu Domain.` });
+    return d;
   }
 
   private async validateTargets(orgId: string, flow: FlowType, offerId?: string, landingPageId?: string, fallbackUrl?: string) {

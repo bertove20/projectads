@@ -13,7 +13,7 @@ import { errorMessage } from '@/lib/api';
 import { presetRange } from '@/lib/format';
 import { useOrgAction, useOrgQuery } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
-import { Campaign, label, Report } from '@/lib/types';
+import { Campaign, DomainsResponse, label, Report } from '@/lib/types';
 
 function Info({ k, v }: { k: string; v: React.ReactNode }) {
   return (
@@ -54,6 +54,31 @@ function SpendForm({ campaign }: { campaign: Campaign }) {
         Simpan spend
       </Button>
     </form>
+  );
+}
+
+/** Pilih domain untuk tracking link: domain platform atau domain kustom yang sudah aktif. */
+function DomainPicker({ campaign }: { campaign: Campaign }) {
+  const domains = useOrgQuery<DomainsResponse>('/domains');
+  const action = useOrgAction();
+  const active = (domains.data?.domains ?? []).filter((d) => d.status === 'ACTIVE' || d.id === campaign.trackingDomainId);
+  if (!domains.data) return null;
+  return (
+    <Select
+      aria-label="Domain tracking link"
+      className="h-8 w-56"
+      value={campaign.trackingDomainId ?? ''}
+      disabled={action.isPending}
+      onChange={(e) => action.mutate({ method: 'PATCH', path: `/campaigns/${campaign.id}`, body: { trackingDomainId: e.target.value || null } })}
+    >
+      <option value="">{domains.data.platform.trackerHost} (platform)</option>
+      {active.map((d) => (
+        <option key={d.id} value={d.id} disabled={d.status !== 'ACTIVE'}>
+          {d.hostname}
+          {d.status !== 'ACTIVE' ? ' (belum aktif)' : ''}
+        </option>
+      ))}
+    </Select>
   );
 }
 
@@ -154,9 +179,14 @@ export default function CampaignDetailPage() {
       )}
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <Card title="Tracking link" className="lg:col-span-2">
+        <Card title="Tracking link" className="lg:col-span-2" actions={canManage && <DomainPicker campaign={c} />}>
           {c.trackingLink && (
             <div className="space-y-3 text-sm">
+              {c.trackingDomainId && c.trackingLink.domain?.status !== 'ACTIVE' && (
+                <Alert tone="yellow">
+                  Domain {c.trackingLink.domain?.hostname} tidak lagi terverifikasi, sehingga tracking link sementara memakai domain tracking platform. Perbaiki DNS di menu Domain.
+                </Alert>
+              )}
               <p>Pasang URL ini sebagai target URL campaign di jaringan iklan. Ganti setiap <code>[MACRO_…]</code> dengan macro resmi jaringan (lihat dokumentasi jaringan).</p>
               <CopyText value={c.trackingLink.example} />
               {c.flowType === 'LANDING' && (

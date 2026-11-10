@@ -48,6 +48,7 @@ model Organization {
   alerts             Alert[]
   channels           NotificationChannel[]
   events             TrackingEvent[]
+  trackingDomains    TrackingDomain[]
 
   @@map("organizations")
 }
@@ -209,9 +210,10 @@ model Website {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  landingPages LandingPage[]
-  events       TrackingEvent[]
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  landingPages    LandingPage[]
+  events          TrackingEvent[]
+  trackingDomains TrackingDomain[]
 
   @@unique([organizationId, domain])
   @@map("websites")
@@ -425,6 +427,8 @@ model Campaign {
   offerId            String?      @map("offer_id") @db.Uuid
   landingPageId      String?      @map("landing_page_id") @db.Uuid
   fallbackUrl        String?      @map("fallback_url")
+  /// Domain tracking kustom untuk tracking link (null = domain tracking utama platform)
+  trackingDomainId   String?      @map("tracking_domain_id") @db.Uuid
   /// Goal konversi yang dikirim sebagai postback ke jaringan (mis. "default", "lead")
   conversionGoal     String       @default("default") @map("conversion_goal")
   postbackEnabled    Boolean      @default(false) @map("postback_enabled")
@@ -441,6 +445,7 @@ model Campaign {
   spendEntries   SpendEntry[]
   zoneLists      ZoneListEntry[]
   routes         CampaignRoute[]
+  trackingDomain TrackingDomain? @relation(fields: [trackingDomainId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status])
   @@map("campaigns")
@@ -933,4 +938,34 @@ model TrackingEvent {
   @@index([campaignId, type, occurredAt])
   @@index([clickId])
   @@map("tracking_events")
+}
+
+// ───────────────────────────── Manajemen domain tracking ─────────────────────────────
+
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
+/// Domain tracking kustom milik organisasi (mis. go.brand.com), diarahkan lewat CNAME ke domain tracking utama.
+/// Sertifikat HTTPS diterbitkan otomatis oleh Caddy (on-demand TLS) HANYA untuk domain berstatus ACTIVE.
+model TrackingDomain {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  /// Opsional: website pemilik domain (domain first-party untuk JS SDK)
+  websiteId      String?      @map("website_id") @db.Uuid
+  hostname       String       @unique
+  status         DomainStatus @default(PENDING)
+  verifiedAt     DateTime?    @map("verified_at")
+  lastCheckAt    DateTime?    @map("last_check_at")
+  lastError      String?      @map("last_error")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  website      Website?     @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  campaigns    Campaign[]
+
+  @@index([organizationId])
+  @@map("tracking_domains")
 }

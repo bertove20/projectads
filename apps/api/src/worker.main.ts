@@ -10,6 +10,8 @@ import { networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } 
 import { NetworkSyncService } from './networks/network-sync.service';
 import { DeliveryService } from './postbacks/delivery.service';
 import { WorkerService } from './worker/worker.service';
+import { DomainsService } from './domains/domains.service';
+import { dnsResolverProvider } from './domains/resolver.provider';
 
 /** Proses "worker": postback keluar, sinkronisasi jaringan, notifikasi, dan tugas berkala. */
 @Module({
@@ -19,6 +21,8 @@ import { WorkerService } from './worker/worker.service';
     NetworkSyncService,
     NotificationService,
     AlertService,
+    DomainsService,
+    dnsResolverProvider,
     WorkerService,
     postbackQueueProvider(REDIS),
     networkSyncQueueProvider(REDIS),

@@ -1659,3 +1659,24 @@ Sumber: spesifikasi OpenAPI resmi "Propeller SSP API" v5 di https://ssp-api.prop
 |---|---|---|
 | Clickadu | Hanya artikel help center yang saling bertentangan (host `ssp.clickadu.com` vs `v2.api.clickadu.com`), batas 200 request/jam | Minta dokumentasi versi terbaru ke account manager; integrasi API ditolak sampai terverifikasi |
 | EvaDav | Dokumentasi API 2.2 hanya lewat personal manager | Sama seperti di atas |
+
+## 22. MANAJEMEN DOMAIN
+
+### 22.1 Pemisahan Domain Platform
+
+| Variabel | Contoh | Fungsi | Dibagikan ke |
+|---|---|---|---|
+| `ADMIN_DOMAIN` | admin.trkads.org | Login & dashboard, `/api/*` | Tim internal |
+| `TRACKER_DOMAIN` | trk.trkads.org | `/c/*`, `/click-out`, `/sdk.js`, `/e` | Jaringan iklan, landing page |
+| `POSTBACK_DOMAIN` | pb.trkads.org | `/postback/in/*` | Affiliate network |
+
+Reverse proxy hanya membuka path sesuai fungsi tiap domain. Domain admin tidak pernah muncul di tracking link atau URL postback.
+
+### 22.2 Domain Tracking Kustom
+
+- Organisasi dapat mendaftarkan domain sendiri (mis. `go.brand.com`) untuk tracking link dan JS SDK first-party.
+- Verifikasi kepemilikan: CNAME ke `TRACKER_DOMAIN`, atau A record yang semua IP-nya sama dengan IP `TRACKER_DOMAIN` (domain apex).
+- Sertifikat HTTPS diterbitkan otomatis (Caddy on-demand TLS) **hanya** untuk domain berstatus ACTIVE, lewat endpoint internal `/internal/tls-allowed` yang tidak terbuka ke internet dan dilindungi `INTERNAL_ASK_KEY`.
+- Domain platform tidak bisa didaftarkan sebagai domain kustom; satu hostname hanya bisa dimiliki satu organisasi.
+- Verifikasi ulang otomatis tiap 6 jam. Bila DNS tidak lagi mengarah ke platform: status FAILED, sertifikat tidak diperpanjang, tracking link campaign kembali ke domain platform, alert HIGH dikirim.
+- Domain yang masih dipakai campaign tidak bisa dihapus.

@@ -34,7 +34,9 @@ services:
     environment:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN}
       TRACKER_DOMAIN: ${TRACKER_DOMAIN}
+      POSTBACK_DOMAIN: ${POSTBACK_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
+      INTERNAL_ASK_KEY: ${INTERNAL_ASK_KEY}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

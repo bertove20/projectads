@@ -16,7 +16,7 @@ export function useOrgQuery<T>(path: string | null, opts: { refetchInterval?: nu
 }
 
 export interface ActionInput {
-  method: 'POST' | 'PATCH' | 'PUT';
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
   body?: unknown;
 }
@@ -26,7 +26,7 @@ export function useOrgAction<TResult = unknown>() {
   const { org } = useSession();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (a: ActionInput) => api<TResult>(a.path, { method: a.method, body: a.body ?? {} }),
+    mutationFn: (a: ActionInput) => api<TResult>(a.path, { method: a.method, body: a.method === 'DELETE' ? undefined : (a.body ?? {}) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [org.id] }),
   });
 }

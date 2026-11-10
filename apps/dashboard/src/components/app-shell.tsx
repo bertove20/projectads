@@ -34,6 +34,7 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
       { href: '/offers', label: 'Offers', permission: 'offers.read' },
       { href: '/affiliates', label: 'Affiliate networks', permission: 'affiliates.read' },
       { href: '/websites', label: 'Websites & landing', permission: 'websites.read' },
+      { href: '/domains', label: 'Domain', permission: 'websites.read' },
     ],
   },
   {

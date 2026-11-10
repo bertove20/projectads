@@ -21,6 +21,9 @@ import { NetworkSyncService } from './networks/network-sync.service';
 import { OrganizationsController } from './organizations/organizations.controller';
 import { AnalyticsService } from './reports/analytics.service';
 import { EventsController } from './reports/events.controller';
+import { DomainsController } from './domains/domains.controller';
+import { DomainsService } from './domains/domains.service';
+import { dnsResolverProvider } from './domains/resolver.provider';
 import { NetworkReportsController } from './reports/network-reports.controller';
 import { ReportsController } from './reports/reports.controller';
 
@@ -45,6 +48,7 @@ import { ReportsController } from './reports/reports.controller';
     NetworkReportsController,
     AlertsController,
     EventsController,
+    DomainsController,
   ],
   providers: [
     SessionService,
@@ -52,6 +56,8 @@ import { ReportsController } from './reports/reports.controller';
     AnalyticsService,
     AlertService,
     NetworkSyncService,
+    DomainsService,
+    dnsResolverProvider,
     AuthGuard,
     postbackQueueProvider(REDIS),
     networkSyncQueueProvider(REDIS),

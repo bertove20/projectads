@@ -7,6 +7,9 @@ import { ClickService } from './tracking/click.service';
 import { TrackerController } from './tracking/tracker.controller';
 import { EventsService } from './tracking/events.service';
 import { SdkController } from './tracking/sdk.controller';
+import { TlsAskController } from './tracking/tls-ask.controller';
+import { DomainsService } from './domains/domains.service';
+import { dnsResolverProvider } from './domains/resolver.provider';
 
 /**
  * Proses "tracker": endpoint publik klik & postback masuk.
@@ -14,7 +17,7 @@ import { SdkController } from './tracking/sdk.controller';
  */
 @Module({
   imports: [loggerModule('tracker'), CoreModule],
-  controllers: [TrackerController, SdkController],
-  providers: [ClickService, ConversionService, EventsService, postbackQueueProvider(REDIS)],
+  controllers: [TrackerController, SdkController, TlsAskController],
+  providers: [ClickService, ConversionService, EventsService, DomainsService, dnsResolverProvider, postbackQueueProvider(REDIS)],
 })
 export class TrackerModule {}

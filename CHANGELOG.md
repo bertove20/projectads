@@ -5,6 +5,10 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 
 ## [Unreleased] — branch `develop`
 
+### Ditambahkan
+- **Pemisahan domain per fungsi**: admin (dashboard), tracking (klik/SDK), postback (affiliate) — Caddy hanya membuka endpoint sesuai fungsi tiap domain; URL postback affiliate memakai `POSTBACK_PUBLIC_URL`.
+- **Manajemen domain tracking kustom**: tambah domain, instruksi DNS, verifikasi CNAME/A record, HTTPS on-demand (hanya domain aktif), pilih domain per campaign, snippet SDK first-party per website, verifikasi ulang tiap 6 jam + alert.
+
 ### Ditambahkan (Phase 3)
 - **Rotasi & split test**: routing per campaign berdasarkan negara, device, OS, browser, bahasa; varian offer/landing berbobot; varian sticky per pengunjung; laporan split test (CR, interval 95%, p-value, verdict konservatif). Editor routing di halaman campaign.
 - **JS SDK**: event landing page (OBSERVED) dengan batching, antrean offline, consent, sendBeacon, link click-out otomatis; collector dengan allowlist domain, rate limit, deduplikasi, dan pembuangan PII. Panel pemasangan di halaman Websites.

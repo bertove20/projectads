@@ -93,7 +93,8 @@ export interface Campaign {
   networkAccount: { id: string; name: string; network: string; testMode?: boolean; postbackConfigured?: boolean };
   offer?: { id: string; name: string } | null;
   landingPage?: { id: string; name: string } | null;
-  trackingLink?: { base: string; example: string; clickOut: string };
+  trackingDomainId?: string | null;
+  trackingLink?: { base: string; example: string; clickOut: string; domain: { hostname: string; status: string } | null };
 }
 
 export interface ReportRow {
@@ -426,4 +427,24 @@ export interface WebsiteWithSdk extends Website {
   sdkSnippet: string | null;
   extraDomains: string[];
   requireConsent: boolean;
+}
+
+// ───────────── Domain ─────────────
+
+export interface TrackingDomainItem {
+  id: string;
+  hostname: string;
+  status: 'PENDING' | 'ACTIVE' | 'FAILED';
+  verifiedAt: string | null;
+  lastCheckAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  website: { id: string; name: string; domain: string } | null;
+  campaignCount: number;
+  dns: { type: string; name: string; value: string };
+}
+
+export interface DomainsResponse {
+  platform: { trackerHost: string; postbackHost: string; adminHost: string };
+  domains: TrackingDomainItem[];
 }

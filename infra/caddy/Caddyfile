@@ -1,14 +1,36 @@
 {
 	email {$ACME_EMAIL}
+	# Sertifikat untuk domain tracking kustom hanya diterbitkan bila tracker menjawab 200
+	# (domain terdaftar & DNS terverifikasi). Endpoint ini hanya bisa diakses dari jaringan internal.
+	on_demand_tls {
+		ask http://tracker:4100/internal/tls-allowed?key={$INTERNAL_ASK_KEY}
+	}
 }
 
-# Dashboard + API (satu origin agar cookie session first-party)
-{$ADMIN_DOMAIN} {
-	encode zstd gzip
+(common_headers) {
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
 		-Server
 	}
+}
+
+# Path yang boleh diakses publik di domain tracking (utama maupun kustom)
+(tracker_routes) {
+	@tracking path /c/* /click-out /sdk.js /e /healthz
+	handle @tracking {
+		reverse_proxy tracker:4100
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
+
+# ── Admin: login & dashboard tim. Tidak pernah muncul di tracking link atau URL postback. ──
+{$ADMIN_DOMAIN} {
+	import common_headers
+	encode zstd gzip
+	header X-Robots-Tag "noindex, nofollow"
 	handle /api/* {
 		reverse_proxy api:4000
 	}
@@ -17,11 +39,29 @@
 	}
 }
 
-# Domain tracking: klik, click-out, postback masuk
+# ── Tracking: klik (/c/…), click-out, JS SDK & event. Postback dan admin TIDAK tersedia di sini. ──
 {$TRACKER_DOMAIN} {
-	header {
-		Strict-Transport-Security "max-age=31536000"
-		-Server
+	import common_headers
+	import tracker_routes
+}
+
+# ── Postback masuk dari affiliate network saja. ──
+{$POSTBACK_DOMAIN} {
+	import common_headers
+	@postback path /postback/in/* /healthz
+	handle @postback {
+		reverse_proxy tracker:4100
 	}
-	reverse_proxy tracker:4100
+	handle {
+		respond "Not found" 404
+	}
+}
+
+# ── Domain tracking kustom milik organisasi (mis. go.brand.com, CNAME → TRACKER_DOMAIN). ──
+https:// {
+	tls {
+		on_demand
+	}
+	import common_headers
+	import tracker_routes
 }

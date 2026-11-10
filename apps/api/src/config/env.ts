@@ -27,6 +27,12 @@ const schema = z.object({
   DASHBOARD_ORIGIN: z.string().url().default('http://localhost:3000'),
   /** Base URL publik tracker, mis. https://trk.example.com */
   TRACKER_PUBLIC_URL: z.string().url().default('http://localhost:4100'),
+  /** Base URL publik untuk postback MASUK dari affiliate network, mis. https://pb.example.com (default = TRACKER_PUBLIC_URL). */
+  POSTBACK_PUBLIC_URL: z.string().url().optional(),
+  /** Kunci opsional untuk endpoint internal 'ask' on-demand TLS Caddy. */
+  INTERNAL_ASK_KEY: z.string().min(16).optional(),
+  /** HANYA untuk pengujian lokal: JSON {"host": "cname:target" | "a:1.2.3.4"} menggantikan DNS asli. */
+  DNS_TEST_OVERRIDES: z.string().optional(),
   /** Tujuan bila campaign tidak ditemukan / nonaktif dan campaign tidak punya fallback */
   DEFAULT_FALLBACK_URL: z.string().url().default('https://www.google.com'),
 
