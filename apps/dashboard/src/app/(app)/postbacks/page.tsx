@@ -15,7 +15,7 @@ export default function PostbacksPage() {
   const [tab, setTab] = useState<'out' | 'in'>('out');
   const [preset, setPreset] = useState('7d');
   const [status, setStatus] = useState('');
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => presetRange(preset, org.timezone), [preset, org.timezone]);
   const qs = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&limit=200`;
   const deliveries = useOrgQuery<Delivery[]>(tab === 'out' ? `/postbacks/deliveries?${qs}${status ? `&status=${status}` : ''}` : null, { refetchInterval: 15_000 });
   const inbound = useOrgQuery<InboundLog[]>(tab === 'in' ? `/postbacks/inbound?${qs}` : null, { refetchInterval: 15_000 });

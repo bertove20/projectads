@@ -98,12 +98,12 @@ const GROUP_LABEL: Record<string, string> = { zone: 'Zone', country: 'Negara', d
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { can } = useSession();
+  const { can, org } = useSession();
   const campaign = useOrgQuery<Campaign>(`/campaigns/${id}`);
   const action = useOrgAction();
   const [preset, setPreset] = useState('7d');
   const [groupBy, setGroupBy] = useState('zone');
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => presetRange(preset, org.timezone), [preset, org.timezone]);
   const report = useOrgQuery<Report>(
     `/analytics/report?groupBy=${groupBy}&campaignId=${id}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
   );

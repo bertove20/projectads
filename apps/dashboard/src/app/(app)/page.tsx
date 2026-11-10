@@ -10,6 +10,7 @@ import { Alert, Card, cn, Loading, Notes, PageHeader } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
 import { int, money, pct, presetRange, signedMoney } from '@/lib/format';
 import { useOrgQuery } from '@/lib/hooks';
+import { useSession } from '@/lib/session';
 import type { Report, ReportRow } from '@/lib/types';
 
 const RANGE_LABEL: Record<string, string> = { today: 'hari ini', yesterday: 'kemarin', '7d': '7 hari terakhir', '30d': '30 hari terakhir', '90d': '90 hari terakhir' };
@@ -55,8 +56,9 @@ function PnlLine({ t, currency, range }: { t: ReportRow; currency: string; range
 }
 
 export default function OverviewPage() {
+  const { org } = useSession();
   const [preset, setPreset] = useState('7d');
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => presetRange(preset, org.timezone), [preset, org.timezone]);
   const qs = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
   const byDay = useOrgQuery<Report>(`/analytics/report?groupBy=day&${qs}`, { refetchInterval: 60_000 });
   const byCampaign = useOrgQuery<Report>(`/analytics/report?groupBy=campaign&${qs}`, { refetchInterval: 60_000 });

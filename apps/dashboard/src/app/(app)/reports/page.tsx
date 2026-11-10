@@ -8,6 +8,7 @@ import { Alert, Button, Card, Loading, PageHeader, Select } from '@/components/u
 import { errorMessage } from '@/lib/api';
 import { downloadCsv, presetRange } from '@/lib/format';
 import { useOrgQuery } from '@/lib/hooks';
+import { useSession } from '@/lib/session';
 import type { Campaign, Report } from '@/lib/types';
 
 const DIMENSIONS = [
@@ -23,10 +24,11 @@ const DIMENSIONS = [
 ] as const;
 
 export default function ReportsPage() {
+  const { org } = useSession();
   const [groupBy, setGroupBy] = useState('campaign');
   const [campaignId, setCampaignId] = useState('');
   const [preset, setPreset] = useState('7d');
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => presetRange(preset, org.timezone), [preset, org.timezone]);
   const campaigns = useOrgQuery<Campaign[]>('/campaigns');
   const report = useOrgQuery<Report>(
     `/analytics/report?groupBy=${groupBy}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}${campaignId ? `&campaignId=${campaignId}` : ''}`,

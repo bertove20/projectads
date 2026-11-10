@@ -16,7 +16,7 @@ export default function ConversionsPage() {
   const { org } = useSession();
   const [preset, setPreset] = useState('7d');
   const [status, setStatus] = useState('');
-  const range = useMemo(() => presetRange(preset), [preset]);
+  const range = useMemo(() => presetRange(preset, org.timezone), [preset, org.timezone]);
   const list = useOrgQuery<Conversion[]>(
     `/conversions?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&limit=200${status ? `&status=${status}` : ''}`,
   );

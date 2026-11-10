@@ -30,16 +30,49 @@ export function dateTime(v: string | Date | null | undefined, timeZone?: string)
   return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(v));
 }
 
-/** Rentang preset dalam ISO (UTC) untuk query laporan. */
-export function presetRange(preset: string): { from: string; to: string } {
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const day = 86400_000;
-  const to = new Date(startOfToday.getTime() + day);
-  const days = preset === 'today' ? 1 : preset === '7d' ? 7 : preset === '30d' ? 30 : preset === '90d' ? 90 : 7;
-  if (preset === 'yesterday') return { from: new Date(startOfToday.getTime() - day).toISOString(), to: startOfToday.toISOString() };
-  return { from: new Date(to.getTime() - days * day).toISOString(), to: to.toISOString() };
+/** Selisih (ms) antara waktu lokal di zona `tz` dan UTC pada instant tertentu. */
+function tzOffsetMs(instant: Date, tz: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(instant)
+      .map((p) => [p.type, p.value]),
+  );
+  const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+  return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/** Instant UTC untuk pukul 00:00 tanggal `ymd` (YYYY-MM-DD) di zona `tz`. */
+export function zonedMidnight(ymd: string, tz: string): Date {
+  const guess = new Date(`${ymd}T00:00:00Z`);
+  const first = new Date(guess.getTime() - tzOffsetMs(guess, tz));
+  // Koreksi kedua untuk tanggal yang melewati pergantian DST
+  return new Date(guess.getTime() - tzOffsetMs(first, tz));
+}
+
+function todayIn(tz: string, now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+function addDays(ymd: string, n: number): string {
+  return new Date(new Date(`${ymd}T00:00:00Z`).getTime() + n * 86400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Rentang preset (ISO/UTC) dengan batas hari mengikuti zona waktu organisasi,
+ * sama dengan zona waktu yang dipakai server untuk mengelompokkan laporan.
+ */
+export function presetRange(preset: string, tz = 'UTC', now = new Date()): { from: string; to: string } {
+  let zone = tz;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+  } catch {
+    zone = 'UTC';
+  }
+  const today = todayIn(zone, now);
+  const tomorrow = addDays(today, 1);
+  if (preset === 'yesterday') return { from: zonedMidnight(addDays(today, -1), zone).toISOString(), to: zonedMidnight(today, zone).toISOString() };
+  const days = preset === 'today' ? 1 : preset === '30d' ? 30 : preset === '90d' ? 90 : 7;
+  return { from: zonedMidnight(addDays(tomorrow, -days), zone).toISOString(), to: zonedMidnight(tomorrow, zone).toISOString() };
 }
 
 export const RANGE_PRESETS = [
