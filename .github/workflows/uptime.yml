@@ -1,0 +1,81 @@
+# Monitoring uptime dari LUAR VPS (read.md 17.10).
+# Setiap ±5 menit memeriksa admin, tracking, postback, dan masa berlaku sertifikat HTTPS.
+# Bila gagal, kirim pesan Telegram (secret TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID) dan workflow ditandai gagal
+# (GitHub juga mengirim email kegagalan workflow terjadwal).
+# Catatan: jadwal GitHub Actions bersifat best-effort; jeda bisa lebih dari 5 menit saat GitHub sibuk.
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADMIN_URL: https://admin.trkads.org
+      TRACKER_URL: https://trk.trkads.org
+      POSTBACK_URL: https://pb.trkads.org
+      CERT_WARN_DAYS: "14"
+    steps:
+      - name: Periksa endpoint & sertifikat
+        id: check
+        shell: bash
+        run: |
+          set -u
+          problems=()
+          probe() { # nama, url, kode yang diharapkan
+            local code
+            for attempt in 1 2 3; do
+              code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$2" || echo 000)
+              [[ "$code" == "$3" ]] && { echo "✓ $1 $2 → $code"; return 0; }
+              sleep 10
+            done
+            echo "✗ $1 $2 → $code (harusnya $3)"
+            problems+=("$1: $2 → HTTP $code")
+          }
+          probe "Admin API"  "$ADMIN_URL/api/v1/health" 200
+          probe "Dashboard"  "$ADMIN_URL/login"         200
+          probe "Tracker"    "$TRACKER_URL/healthz"     200
+          probe "Postback"   "$POSTBACK_URL/healthz"    200
+          # Pemisahan domain harus tetap berlaku: tracker tidak boleh membuka API admin
+          probe "Isolasi trk" "$TRACKER_URL/api/v1/health" 404
+
+          for host in "${ADMIN_URL#https://}" "${TRACKER_URL#https://}" "${POSTBACK_URL#https://}"; do
+            end=$(echo | openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            if [[ -z "$end" ]]; then problems+=("Sertifikat $host tidak terbaca"); echo "✗ sertifikat $host tidak terbaca"; continue; fi
+            days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+            echo "• sertifikat $host berlaku $days hari lagi"
+            (( days < CERT_WARN_DAYS )) && problems+=("Sertifikat $host habis dalam $days hari")
+          done
+
+          if (( ${#problems[@]} )); then
+            { echo "problems<<EOF"; printf '%s\n' "${problems[@]}"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Kirim alert Telegram
+        if: failure() && steps.check.outputs.problems != ''
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROBLEMS: ${{ steps.check.outputs.problems }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+            echo "Secret Telegram belum diatur — alert hanya lewat email GitHub."; exit 0
+          fi
+          text=$(printf '🔴 EAIP uptime: masalah terdeteksi\n%s\n\n%s' "$PROBLEMS" "$RUN_URL")
+          curl -s -m 15 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=${text}" \
+            --data-urlencode "disable_web_page_preview=true" > /dev/null
