@@ -27,7 +27,6 @@ import {
   MaxLength,
 } from 'class-validator';
 import { AuditService } from '../common/audit/audit.service';
-import { CryptoService } from '../common/crypto/crypto.service';
 import { AuthUser, CurrentUser, Org, OrgContext, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { notFound } from '../common/scope';
@@ -83,7 +82,6 @@ export class OrganizationsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly crypto: CryptoService,
   ) {}
 
   /** Membuat organisasi baru (Super Admin saja). Pembuat menjadi Owner. */

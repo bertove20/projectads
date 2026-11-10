@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { AlertStatus, Severity } from '@prisma/client';
+import { AlertStatus, Prisma, Severity } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { IsBoolean, IsEnum, IsOptional, IsString, Length, Matches } from 'class-validator';
 import { AuditService } from '../common/audit/audit.service';
@@ -25,6 +25,15 @@ class UpdateChannelDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
+/**
+ * Anggota dengan cakupan ASSIGNED hanya melihat alert campaign yang di-assign kepadanya.
+ * Alert tingkat akun/organisasi (sinkronisasi, postback gagal) tetap terlihat karena tidak memuat data campaign lain.
+ */
+function alertScope(org: OrgContext): Prisma.AlertWhereInput {
+  if (!org.campaignIds) return {};
+  return { OR: [{ entityType: { not: 'campaign' } }, { entityType: null }, { entityType: 'campaign', entityId: { in: org.campaignIds } }] };
+}
+
 const CHANNEL_SELECT = { id: true, type: true, name: true, target: true, secretHint: true, minSeverity: true, enabled: true, lastTestAt: true, createdAt: true } as const;
 
 @ApiTags('alerts')
@@ -42,7 +51,7 @@ export class AlertsController {
   list(@Org() org: OrgContext, @Query('status') status?: string) {
     if (status && !(status in AlertStatus)) throw new BadRequestException({ code: 'BAD_STATUS', message: 'Status tidak valid' });
     return this.prisma.alert.findMany({
-      where: { organizationId: org.organizationId, ...(status ? { status: status as AlertStatus } : {}) },
+      where: { organizationId: org.organizationId, ...(status ? { status: status as AlertStatus } : {}), ...alertScope(org) },
       include: { deliveries: { select: { status: true, error: true, channel: { select: { name: true } } } } },
       orderBy: [{ status: 'asc' }, { lastSeenAt: 'desc' }],
       take: 200,
@@ -52,7 +61,7 @@ export class AlertsController {
   @Get('alerts/summary')
   @RequirePermissions('alerts.read')
   async summary(@Org() org: OrgContext) {
-    const rows = await this.prisma.alert.groupBy({ by: ['severity'], where: { organizationId: org.organizationId, status: 'OPEN' }, _count: true });
+    const rows = await this.prisma.alert.groupBy({ by: ['severity'], where: { organizationId: org.organizationId, status: 'OPEN', ...alertScope(org) }, _count: true });
     return { open: rows.reduce((s, r) => s + r._count, 0), bySeverity: Object.fromEntries(rows.map((r) => [r.severity, r._count])) };
   }
 
@@ -61,7 +70,7 @@ export class AlertsController {
   @HttpCode(200)
   async transition(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('action') action: string) {
     if (!['acknowledge', 'resolve'].includes(action)) throw new BadRequestException({ code: 'BAD_ACTION', message: 'Aksi tidak dikenal' });
-    const a = await this.prisma.alert.findFirst({ where: { id, organizationId: org.organizationId } });
+    const a = await this.prisma.alert.findFirst({ where: { id, organizationId: org.organizationId, ...alertScope(org) } });
     if (!a) notFound('Alert');
     const updated = await this.prisma.alert.update({
       where: { id },

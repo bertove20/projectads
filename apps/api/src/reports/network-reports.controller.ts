@@ -123,7 +123,8 @@ export class NetworkReportsController {
         flagged: clickGap !== null && nc >= this.env.RECON_MIN_CLICKS && Math.abs(clickGap) >= threshold && r.date !== today,
       };
     });
-    const unmapped = await this.prisma.networkStatDaily.groupBy({
+    // Campaign yang belum dipetakan bukan milik siapa pun → hanya untuk anggota dengan akses seluruh organisasi.
+    const unmapped = org.campaignIds ? [] : await this.prisma.networkStatDaily.groupBy({
       by: ['externalCampaignId'],
       where: { networkAccountId: acc.id, campaignId: null, date: { gte: new Date(`${range.from}T00:00:00Z`), lte: new Date(`${range.to}T00:00:00Z`) } },
       _sum: { spend: true, clicks: true },

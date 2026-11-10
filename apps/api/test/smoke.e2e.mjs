@@ -316,6 +316,13 @@ async function main() {
   check('Media Buyer tidak bisa mengatur token API', btok.status === 403, btok);
   const brecon = await buyer.get(`/analytics/reconciliation?networkAccountId=${rnet.body.id}`);
   check('rekonsiliasi untuk Media Buyer hanya memuat campaign yang di-assign', brecon.status === 200 && brecon.body.rows.every((r) => r.campaignId === camp.body.id), brecon.body?.rows?.length);
+  check('Media Buyer tidak melihat campaign jaringan yang belum dipetakan', brecon.body?.unmappedCampaigns?.length === 0, brecon.body?.unmappedCampaigns);
+  const balerts = await buyer.get('/alerts');
+  check('Media Buyer tidak melihat alert campaign di luar cakupannya', balerts.status === 200 && !balerts.body.some((a) => a.entityType === 'campaign' && a.entityId !== camp.body.id), balerts.body?.map((a) => a.title));
+  const bsum = await buyer.get('/alerts/summary');
+  check('ringkasan alert Media Buyer mengikuti cakupan', bsum.status === 200 && bsum.body.open <= (await admin.get('/alerts/summary')).body.open, bsum.body);
+  const back = await buyer.post(`/alerts/${reconAlert?.id}/resolve`);
+  check('Media Buyer tidak bisa menutup alert campaign di luar cakupannya (404)', back.status === 404, back);
 
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
