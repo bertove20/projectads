@@ -1,0 +1,9 @@
+type: integer
+enum:
+  - 1
+  - 2
+  - 3
+  - 6
+  - 7
+  - 8
+description: "1 – draft; 2 – moderation; 3 – rejected; 6 – working; 7 – paused; 8 – stopped"

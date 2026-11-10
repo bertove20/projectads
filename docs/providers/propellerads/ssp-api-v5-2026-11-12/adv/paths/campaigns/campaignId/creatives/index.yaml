@@ -1,0 +1,49 @@
+post:
+  summary: Add new creatives
+  tags:
+    - campaigns
+  description: >-
+    Add new creatives. To add creatives you already have in your campaigns without uploading the pictures again,
+    use `POST /adv/campaigns/{campaignId}/creatives/existing`.
+    A campaign holds at most 8 creatives; a request that does not fit adds none of its creatives.
+    A running campaign is sent to moderation again, which counts as a campaign launch against your daily limit of launches.
+  operationId: adv-campaigns-add-creatives
+  parameters:
+    - in: path
+      name: campaignId
+      description: Numeric ID of the campaign
+      schema:
+        type: integer
+      required: true
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            creatives:
+              type: array
+              items:
+                $ref: '../../../../components/schemas/Creative.yaml'
+          example:
+            creatives:
+              - {
+                "icon": "base64string for push icon",
+                "image": "base64string for push image",
+                "title": "Creative title for push",
+                "description": "Creative description for push"
+              }
+              - {
+                "image": "base64string for interstitial image",
+                "title": "Creative title for interstitial"
+              }
+  responses:
+    '200':
+      $ref: '../../../../components/responses/Success.yaml'
+    '401':
+      $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+    '400':
+      $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+    '429':
+      $ref: '../../../../../common/components/responses/RateLimit.yaml'

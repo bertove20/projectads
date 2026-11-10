@@ -15,7 +15,22 @@ export function SyncBadge({ status }: { status: NetworkAccount['lastSyncStatus']
   return <Badge tone={SYNC_TONE[status]}>{status.toLowerCase()}</Badge>;
 }
 
-/** Panel integrasi API (saat ini hanya RollerAds — read.md Bagian 20). */
+/** Jaringan dengan integrasi API terverifikasi dan petunjuk token masing-masing (read.md 20, 20B). */
+const API_NETWORKS: Record<string, { name: string; tokenHelp: string; accountLabel: string | null; assumedCurrency?: string }> = {
+  ROLLERADS: {
+    name: 'RollerAds',
+    tokenHelp: 'Access token diminta ke account manager RollerAds.',
+    accountLabel: 'ID akun RollerAds',
+  },
+  PROPELLERADS: {
+    name: 'PropellerAds',
+    tokenHelp: 'Buat token di halaman Profile akun PropellerAds (bagian API access). Statistik diambil dalam UTC; mata uang dianggap USD karena API tidak menyertakannya.',
+    accountLabel: null,
+    assumedCurrency: 'USD',
+  },
+};
+
+/** Panel integrasi API per akun jaringan. */
 export function NetworkIntegration({ account }: { account: NetworkAccount }) {
   const { can, org } = useSession();
   const action = useOrgAction<{ account?: { title: string; timezone: string; currency: string }; timezoneRecognized?: boolean }>();
@@ -25,7 +40,8 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
   const runs = useOrgQuery<SyncRun[]>(account.apiConfigured ? `/network-accounts/${account.id}/sync-runs` : null, { refetchInterval: 10_000 });
   const remote = useOrgQuery<RemoteCampaign[]>(showRemote ? `/network-accounts/${account.id}/remote-campaigns` : null);
 
-  if (account.network !== 'ROLLERADS') {
+  const net = API_NETWORKS[account.network];
+  if (!net) {
     return (
       <Alert tone="yellow">
         Integrasi API untuk jaringan ini belum tersedia karena dokumentasi API resminya belum diverifikasi. Catat spend secara manual di halaman campaign.
@@ -38,7 +54,12 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
     const r = await action.mutateAsync({ method: 'PUT', path: `/network-accounts/${account.id}/api-token`, body: { token } }).catch(() => null);
     if (r) {
       setToken('');
-      setMsg(`Terhubung ke akun "${r.account?.title}". Zona waktu ${r.account?.timezone}${r.timezoneRecognized ? '' : ' (tidak dikenali, rekonsiliasi memakai UTC)'}, mata uang ${r.account?.currency}.`);
+      const parts = [
+        r.account?.title ? `Terhubung ke akun "${r.account.title}".` : `Terhubung ke ${net!.name}.`,
+        `Zona waktu laporan ${r.account?.timezone ?? 'UTC'}${r.timezoneRecognized ? '' : ' (tidak dikenali, rekonsiliasi memakai UTC)'}.`,
+        r.account?.currency ? `Mata uang ${r.account.currency}.` : null,
+      ];
+      setMsg(parts.filter(Boolean).join(' '));
     }
   }
 
@@ -52,12 +73,16 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
         <dd>{account.apiConfigured ? <Badge tone="green">terhubung</Badge> : <Badge tone="yellow">belum</Badge>}</dd>
         {account.apiConfigured && (
           <>
-            <dt className="text-muted">ID akun RollerAds</dt>
-            <dd className="tabular">{account.externalAccountId}</dd>
+            {net.accountLabel && (
+              <>
+                <dt className="text-muted">{net.accountLabel}</dt>
+                <dd className="tabular">{account.externalAccountId ?? '—'}</dd>
+              </>
+            )}
             <dt className="text-muted">Zona waktu laporan</dt>
             <dd>{account.networkTimezone ?? <span className="text-warning">tidak dikenali → UTC</span>}</dd>
             <dt className="text-muted">Mata uang</dt>
-            <dd>{account.networkCurrency ?? '—'}</dd>
+            <dd>{account.networkCurrency ?? (net.assumedCurrency ? `${net.assumedCurrency} (dianggap)` : '—')}</dd>
             <dt className="text-muted">Sinkronisasi terakhir</dt>
             <dd className="flex flex-wrap items-center gap-1.5">
               <SyncBadge status={account.lastSyncStatus} /> {dateTime(account.lastSyncAt, org.timezone)}
@@ -70,7 +95,7 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
       {can('networks.credentials') && (
         <div className="space-y-2">
           <p className="text-sm text-muted">
-            Access token diminta ke account manager RollerAds. Disimpan terenkripsi, dikirim lewat header <code>X-ACCESS-TOKEN</code>, dan tidak akan ditampilkan lagi.
+            {net.tokenHelp} Token disimpan terenkripsi dan tidak akan ditampilkan lagi.
           </p>
           <div className="flex gap-2">
             <Input type="password" autoComplete="off" placeholder={account.apiConfigured ? 'Ganti token…' : 'Tempel access token'} value={token} onChange={(e) => setToken(e.target.value)} />
@@ -90,7 +115,7 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
             {account.syncEnabled ? 'Matikan sinkronisasi otomatis' : 'Aktifkan sinkronisasi otomatis'}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setShowRemote(!showRemote)}>
-            {showRemote ? 'Sembunyikan' : 'Lihat'} campaign di RollerAds
+            {showRemote ? 'Sembunyikan' : 'Lihat'} campaign di {net.name}
           </Button>
         </div>
       )}
@@ -102,12 +127,12 @@ export function NetworkIntegration({ account }: { account: NetworkAccount }) {
           {remote.isLoading ? (
             <Loading />
           ) : (
-            <Table head={['ID', 'Nama di RollerAds', 'Status', 'Dipetakan ke']} empty={!remote.data?.length}>
+            <Table head={['ID', `Nama di ${net.name}`, 'Status', 'Dipetakan ke']} empty={!remote.data?.length}>
               {remote.data?.map((r) => (
-                <tr key={r.campaign_id}>
-                  <Td numeric>{r.campaign_id}</Td>
-                  <Td>{r.campaign_title}</Td>
-                  <Td>{r.campaign_status}</Td>
+                <tr key={r.id}>
+                  <Td className="tabular">{r.id}</Td>
+                  <Td>{r.title}</Td>
+                  <Td>{r.status}</Td>
                   <Td>{r.mappedTo ? r.mappedTo.name : <Badge tone="yellow">belum</Badge>}</Td>
                 </tr>
               ))}

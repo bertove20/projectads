@@ -1,0 +1,16 @@
+type: string
+enum:
+  - "cpm"
+  - "scpm"
+  - "cpc"
+  - "scpc"
+  - "scpa"
+  - "cpag"
+description: >
+  String IDs of the campaigns rate models to get, ex. cpm, cpa, scpm
+    * `cpm`  - Cost per mile
+    * `scpm` - Smart cost per mile
+    * `cpc`  - Cost per click
+    * `scpc` - Smart cost per click
+    * `scpa` - CPA Goal 2.0 (by impressions for OnClick)
+    * `cpag` - CPA Goal 2.0 (by clicks for Push)

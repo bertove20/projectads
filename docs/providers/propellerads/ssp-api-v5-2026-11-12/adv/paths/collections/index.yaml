@@ -1,0 +1,25 @@
+get:
+  summary: Get available collections
+  tags:
+    - collections
+  description: Get available collections
+  operationId: collections
+  responses:
+    '200':
+      description: Returned JSON array with available collections
+      headers:
+        X-Request-Id:
+          $ref: '../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                type: array
+                items:
+                  type: string
+    '401':
+      $ref: '../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../common/components/responses/RateLimit.yaml'

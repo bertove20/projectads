@@ -1,0 +1,94 @@
+type: object
+properties:
+  name:
+    type: string
+    maxLength: 255
+  direction:
+    $ref: '../../components/schemas/Direction.yaml'
+  rate_model:
+    $ref: '../../components/schemas/RateModel.yaml'
+  target_url:
+    type: string
+    example: "https://propellerads.com/?clickid=${SUBID}"
+    description: "CPA & SCPA rate models must have ${SUBID} macro."
+  frequency:
+    $ref: '../../components/schemas/Frequency.yaml'
+  capping:
+    $ref: '../../components/schemas/Capping.yaml'
+  status:
+    type: integer
+    enum: [ 1, 2 ]
+    description: "1 = draft; 2 = moderation;"
+    default: 1
+  started_at:
+    type: string
+    description: "in dd/MM/YYYY format."
+  expired_at:
+    type: string
+    description: in dd/MM/YYYY format.
+  audience:
+    $ref: '../../components/schemas/CampaignAudience.yaml'
+  evenly_limits_usage:
+    type: integer
+    enum: [ 0, 1 ]
+    description: "Supported for Onclick CPM/SCPM."
+  is_adblock_buy:
+    type: integer
+    enum: [ 0, 1 ]
+    description: "Supported for Onclick CPM/SCPM/CPA/SCPA."
+  daily_amount:
+    type: number
+    description: "Required for Push CPC. Min value is $10 ($5 for Onclick CPA). Should be less than total_amount."
+  total_amount:
+    type: number
+    description: "Min value is $10 ($100 for Onclick CPA). Should be greater than daily_amount."
+  targeting:
+    $ref: '../../components/schemas/CampaignTargeting.yaml'
+  timezone:
+    type: integer
+    enum: [ -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
+    description: "Need for scheduling the campaign via timetable targeting."
+    default: -5
+  cpa_goal_status:
+    type: boolean
+    description: "Supported for Onclick SCPM, Push CPM/CPC and Interstitial CPC."
+  cpa_goal_bid:
+    type: number
+    description: "Supported for Onclick SCPM, Push CPM/CPC and Interstitial CPC."
+  cpa_goal_slice_budget:
+    type: number
+    description: "Supported for Onclick SCPM, Push CPM/CPC and Interstitial CPC."
+  is_auto_bidding:
+    type: integer
+    enum: [ 0, 1 ]
+    description: "Supported for Onclick SCPM."
+  #        Offers are under feature-targeting, so no need to expand them to everyone
+  #        offer_id:
+  #          type: integer
+  #          description: "Supported for Onclick CPA/SCPA."
+  allow_zone_update:
+    type: boolean
+    description: "When publishers update zone IDs, it might affect campaign performance. Allow us to add zones with changed IDs to your whitelist to avoid performance drop"
+  campaign_cpa_test:
+    type: object
+    properties:
+      test_limit_amount:
+        type: number
+    description: "Supported for Onclick CPA."
+  rates:
+    type: array
+    items:
+      $ref: '../../components/schemas/Rates.yaml'
+  creatives:
+    type: array
+    items:
+      $ref: '../../components/schemas/CampaignCreative.yaml'
+required:
+  - direction
+  - rate_model
+  - target_url
+  - status
+  - started_at
+  - targeting
+  - timezone
+  - rates

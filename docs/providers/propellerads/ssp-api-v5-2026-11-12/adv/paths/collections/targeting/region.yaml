@@ -1,0 +1,27 @@
+get:
+  summary: Get available regions (targeting)
+  tags:
+    - collections
+  description: Get available regions (targeting)
+  operationId: collections-targeting-regions
+  parameters:
+    - in: query
+      name: countryId
+      schema:
+        type: integer
+      description: Country ID
+      required: true
+  responses:
+    '200':
+      description: Returned JSON array with available regions
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/CollectionResult.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

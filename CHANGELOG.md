@@ -10,6 +10,7 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 - **JS SDK**: event landing page (OBSERVED) dengan batching, antrean offline, consent, sendBeacon, link click-out otomatis; collector dengan allowlist domain, rate limit, deduplikasi, dan pembuangan PII. Panel pemasangan di halaman Websites.
 - **Funnel campaign**: klik → tahap SDK → konversi VERIFIED.
 - Uji browser sungguhan untuk SDK (`apps/api/test/sdk.browser.mjs`).
+- **Adapter PropellerAds** (Propeller SSP API v5, spesifikasi resmi disimpan di docs/): uji token, daftar campaign, sinkronisasi statistik & spend per campaign × zone dalam UTC. Arsitektur adapter jaringan agar RollerAds dan PropellerAds memakai alur sinkronisasi yang sama.
 
 ### Diperbaiki
 - **RBAC**: anggota dengan cakupan terbatas tidak lagi melihat/menutup alert campaign di luar cakupannya, dan tidak melihat campaign RollerAds yang belum dipetakan.

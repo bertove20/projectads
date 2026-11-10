@@ -55,6 +55,8 @@ const schema = z.object({
   // ── Phase 2: integrasi jaringan & notifikasi ──
   /** Base URL API RollerAds (dokumentasi resmi: https://my.rollerads.com/api/docs). Diubah hanya untuk mock lokal. */
   ROLLERADS_API_BASE: z.string().url().default('https://api.rollerads.com/v2'),
+  /** Base URL Propeller SSP API v5 (spesifikasi resmi: https://ssp-api.propellerads.com/v5/docs/). Diubah hanya untuk mock lokal. */
+  PROPELLERADS_API_BASE: z.string().url().default('https://ssp-api.propellerads.com/v5'),
   /** Base URL Telegram Bot API. Diubah hanya untuk mock lokal. */
   TELEGRAM_API_BASE: z.string().url().default('https://api.telegram.org'),
   /** Interval sinkronisasi statistik jaringan (menit). */

@@ -1,0 +1,15 @@
+type: array
+items:
+  type: object
+  properties:
+    amount:
+      type: number
+      description: In dollars
+    zone_id:
+      type: integer
+      description: Zone Id
+example:
+  - amount: 1.23
+    zone_id: 1234567
+  - amount: 4.56
+    zone_id: 8901234

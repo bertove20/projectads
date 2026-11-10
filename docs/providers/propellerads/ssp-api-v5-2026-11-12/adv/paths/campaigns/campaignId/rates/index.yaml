@@ -1,0 +1,4 @@
+put:
+  $ref: "put.yaml"
+get:
+  $ref: "get.yaml"

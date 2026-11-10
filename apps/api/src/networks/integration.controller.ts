@@ -10,7 +10,10 @@ import { NETWORK_SYNC_QUEUE, NetworkSyncJob } from '../common/queues';
 import { assertFullScope, notFound } from '../common/scope';
 import { isValidTimezone } from '../common/tz';
 import { API_SUPPORTED_NETWORKS, NetworkSyncService } from './network-sync.service';
-import { RollerAdsError } from './rollerads.client';
+import { AccountInfo } from './adapters';
+import { NetworkApiError } from './network-errors';
+
+const NETWORK_NAME: Record<string, string> = { ROLLERADS: 'RollerAds', PROPELLERADS: 'PropellerAds' };
 
 class ApiTokenDto {
   @IsString() @Length(8, 512) token: string;
@@ -39,26 +42,26 @@ export class IntegrationController {
     return acc;
   }
 
-  /** Simpan token API (terenkripsi) lalu uji dengan /whoami. Token tidak pernah dikembalikan. */
+  /** Simpan token API (terenkripsi) lalu uji koneksi lewat adapter jaringan. Token tidak pernah dikembalikan. */
   @Put('api-token')
   @RequirePermissions('networks.credentials')
   async setToken(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ApiTokenDto) {
     assertFullScope(org);
     const acc = await this.account(org, id);
     const token = dto.token.trim();
-    let who;
+    const name = NETWORK_NAME[acc.network] ?? acc.network;
+    let info: AccountInfo;
     try {
-      who = await this.sync.clientFor(acc, token).whoami();
+      info = await this.sync.adapterFor(acc, token).testConnection();
     } catch (err) {
-      const status = err instanceof RollerAdsError ? err.status : 0;
+      const status = err instanceof NetworkApiError ? err.status : 0;
       throw new BadRequestException({
         code: 'CONNECTION_FAILED',
-        message: status === 401 || status === 403 ? 'Token ditolak RollerAds' : `Tidak dapat terhubung ke RollerAds: ${(err as Error).message}`,
+        message: status === 401 || status === 403 ? `Token ditolak ${name}` : `Tidak dapat terhubung ke ${name}: ${(err as Error).message}`,
       });
     }
-    if (!who.is_logged_in || !who.account) throw new BadRequestException({ code: 'CONNECTION_FAILED', message: 'Token tidak valid (is_logged_in=false)' });
 
-    const tz = who.account.account_timezone;
+    const tz = info.timezone;
     const ciphertext = this.crypto.encrypt(token);
     await this.prisma.$transaction(async (tx) => {
       await tx.encryptedCredential.upsert({
@@ -70,18 +73,18 @@ export class IntegrationController {
         where: { id: acc.id },
         data: {
           apiConfigured: true,
-          externalAccountId: String(who.account!.account_id),
+          externalAccountId: info.accountId,
           networkTimezone: isValidTimezone(tz) ? tz : null,
-          networkCurrency: /^[A-Z]{3}$/.test(who.account!.account_currency ?? '') ? who.account!.account_currency : null,
+          networkCurrency: /^[A-Z]{3}$/.test(info.currency ?? '') ? info.currency : null,
         },
       });
-      await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'network_account.set_api_token', entityType: 'network_account', entityId: acc.id, after: { externalAccountId: who.account!.account_id } }, tx);
+      await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'network_account.set_api_token', entityType: 'network_account', entityId: acc.id, after: { externalAccountId: info.accountId } }, tx);
     });
     return {
       ok: true,
-      account: { id: who.account.account_id, title: who.account.account_title, currency: who.account.account_currency, timezone: tz },
+      account: { id: info.accountId, title: info.title, currency: info.currency, timezone: tz },
       timezoneRecognized: isValidTimezone(tz),
-      apiEnabled: who.account.is_api_enabled === 1,
+      apiEnabled: info.apiEnabled,
     };
   }
 
@@ -93,8 +96,8 @@ export class IntegrationController {
     const token = await this.sync.tokenFor(acc.id);
     if (!token) throw new BadRequestException({ code: 'NO_TOKEN', message: 'Token API belum dikonfigurasi' });
     try {
-      const who = await this.sync.clientFor(acc, token).whoami();
-      return { ok: who.is_logged_in, account: who.account ? { id: who.account.account_id, title: who.account.account_title, timezone: who.account.account_timezone, currency: who.account.account_currency } : null };
+      const info = await this.sync.adapterFor(acc, token).testConnection();
+      return { ok: true, account: { id: info.accountId, title: info.title, timezone: info.timezone, currency: info.currency } };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
@@ -131,7 +134,7 @@ export class IntegrationController {
     });
   }
 
-  /** Daftar campaign di RollerAds untuk membantu memetakan external campaign ID. */
+  /** Daftar campaign di jaringan iklan untuk membantu memetakan external campaign ID. */
   @Get('remote-campaigns')
   @RequirePermissions('campaigns.read')
   async remoteCampaigns(@Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
@@ -139,10 +142,10 @@ export class IntegrationController {
     const token = await this.sync.tokenFor(acc.id);
     if (!token) throw new BadRequestException({ code: 'NO_TOKEN', message: 'Token API belum dikonfigurasi' });
     const [remote, mapped] = await Promise.all([
-      this.sync.clientFor(acc, token).listCampaigns(),
+      this.sync.adapterFor(acc, token).listCampaigns(),
       this.prisma.campaign.findMany({ where: { networkAccountId: acc.id, externalCampaignId: { not: null } }, select: { id: true, name: true, externalCampaignId: true } }),
     ]);
     const byExt = new Map(mapped.map((m) => [m.externalCampaignId, m]));
-    return remote.map((r) => ({ ...r, mappedTo: byExt.get(String(r.campaign_id)) ?? null }));
+    return remote.map((r) => ({ ...r, mappedTo: byExt.get(r.id) ?? null }));
   }
 }

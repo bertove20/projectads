@@ -1,0 +1,42 @@
+put:
+  summary: Stop one or more creatives
+  tags:
+    - creatives
+  description: Stop one or more creatives
+  operationId: adv-creatives-stop
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            creative_ids:
+              type: array
+              items:
+                type: integer
+          example:
+            creative_ids: [ 111, 222 ]
+  responses:
+    '200':
+      description: A JSON object
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: Message.
+              errors:
+                type: object
+                description: Array of errors by creativeID key.
+    '400':
+      $ref: '../../../components/responses/BadRequest.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

@@ -1,0 +1,31 @@
+type: object
+required:
+  - name
+  - zone_ids
+properties:
+  name:
+    type: string
+    description: Zone group name
+    minLength: 1
+    maxLength: 64
+    example: My zone group
+  zone_ids:
+    type: array
+    description: List of zone IDs
+    minItems: 1
+    maxItems: 5000
+    items:
+      type: integer
+    example: [1, 2, 7]
+  campaign_include_ids:
+    type: array
+    description: List of campaign IDs in which the zone group will be set to include mode
+    items:
+      type: integer
+    example: [9695470, 10006647]
+  campaign_exclude_ids:
+    type: array
+    description: List of campaign IDs in which the zone group will be set to exclude mode
+    items:
+      type: integer
+    example: [10017069, 10004033]

@@ -1,0 +1,9 @@
+type: object
+properties:
+  zone:
+    type: array
+    items:
+      type: string
+      uniqueItems: true
+example:
+  zone: [ "123", "456" ]

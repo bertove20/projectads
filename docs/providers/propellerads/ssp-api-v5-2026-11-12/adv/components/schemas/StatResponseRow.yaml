@@ -1,0 +1,72 @@
+type: object
+properties:
+  banner_id:
+    type: integer
+    example: 123456789
+  campaign_id:
+    type: integer
+    example: 183788
+  optimization_cost:
+    type: number
+    example: 45.9
+  impressions:
+    type: integer
+    example: 1000
+  clicks:
+    type: integer
+    example: 800
+  conversions:
+    type: integer
+    example: 100
+  conversions2:
+    type: integer
+    example: 50
+  conversions3:
+    type: integer
+    example: 10
+  money:
+    type: number
+    example: "123.456789"
+  payout:
+    type: number
+    example: "123.456789"
+  dept:
+    deprecated: true
+    type: string
+    example: "nativeads"
+  spent:
+    type: number
+    example: "123.456"
+  direction:
+    type: string
+    example: "nativeads"
+  vat:
+    type: number
+    example: "123.456"
+  spent_with_vat:
+    type: number
+    example: "123.456"
+  cpm:
+    type: number
+    example: "123.45"
+  cpc:
+    type: number
+    example: "123.45"
+  cpa:
+    type: number
+    example: "123.45"
+  cpa2:
+    type: number
+    example: "246.9"
+  profit:
+    type: number
+    example: "123.456"
+  roi:
+    type: number
+    example: "123.45"
+  ctr:
+    type: number
+    example: "123.45"
+  cr:
+    type: number
+    example: "123.45"

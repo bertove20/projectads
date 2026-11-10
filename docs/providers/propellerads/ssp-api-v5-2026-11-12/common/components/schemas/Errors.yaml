@@ -1,0 +1,12 @@
+type: object
+properties:
+  message:
+    type: string
+    description: General description of the error.
+  errors:
+    oneOf:
+      - type: object
+      - type: array
+        items:
+          type: string
+    description: Detailed description of the error. Object or array.

@@ -1,0 +1,37 @@
+summary: Update a zone group
+tags:
+  - zone-groups
+description: |
+  Replaces `name` and `zone_ids` of the zone group.
+
+  `campaign_include_ids` and `campaign_exclude_ids` are applied separately, each to its own mode:
+  - Field is omitted or `null`: campaigns of the zone group in this mode do not change.
+  - Empty list `[]`: the zone group is removed from all campaigns in this mode.
+  - Non-empty list: the zone group is set on exactly these campaigns in this mode and removed
+    from the other campaigns in this mode.
+
+  A campaign uses a zone group in one mode only. If a campaign is in one list, it moves to that
+  mode, even if the other list is omitted.
+operationId: adv-zone-groups-update
+parameters:
+  - name: id
+    in: path
+    required: true
+    schema:
+      type: integer
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../components/schemas/ZoneGroupUpsertRequest.yaml'
+responses:
+  "200":
+    description: Updated zone group
+    headers:
+      X-Request-Id:
+        $ref: '../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../components/schemas/ZoneGroup.yaml'

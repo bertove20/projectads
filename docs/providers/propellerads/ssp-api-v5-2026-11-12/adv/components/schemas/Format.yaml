@@ -1,0 +1,14 @@
+type: string
+enum:
+  - "onclick"
+  - "ipp"
+  - "classic_push"
+  - "survey"
+  - "telegram"
+description: >
+  Advertising Format:
+    * `onclick` - Onclick (Popunder) ad format
+    * `ipp` - Push notification (In-Page Push) ad format
+    * `classic_push` - Push notification (Classic Push) ad format
+    * `survey` - Interactive Ads ad format
+    * `telegram` - Telegram ads format

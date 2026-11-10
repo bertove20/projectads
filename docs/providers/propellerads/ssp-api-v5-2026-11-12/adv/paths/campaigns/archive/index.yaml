@@ -1,0 +1,73 @@
+put:
+  summary: Archive one or more campaigns
+  tags:
+    - campaigns
+  description: |
+    Archive one or more campaigns. A running campaign is stopped first.
+
+    The list is checked before anything is archived: if any campaign is not found or was created by
+    your account manager, no campaign is archived and `errors` names each refused campaign.
+    A campaign that is already archived is left as it is, so repeating the call is safe.
+  operationId: adv-campaigns-archive
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - campaign_ids
+          properties:
+            campaign_ids:
+              type: array
+              description: IDs of the campaigns to archive, up to 100.
+              minItems: 1
+              maxItems: 100
+              items:
+                type: integer
+          example:
+            campaign_ids: [ 111, 222 ]
+  responses:
+    '200':
+      description: All campaigns are archived.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: Message.
+          example:
+            message: All campaigns archived
+    '400':
+      description: Bad parameters, or some campaigns were refused and none was archived.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: Message.
+              errors:
+                type: object
+                description: Refusal by campaign ID.
+                additionalProperties:
+                  type: string
+          example:
+            message: No campaigns archived
+            errors:
+              '222': Campaign not found
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '403':
+      description: The account is not a PropellerAds advertiser account.
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

@@ -1,0 +1,38 @@
+get:
+  summary: Get available countries info
+  tags:
+    - collections
+  description: Get available countries info
+  operationId: collections-countries
+  responses:
+    '200':
+      description: Returned JSON array with countries items
+      headers:
+        X-Request-Id:
+          $ref: '../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      description: Country ID used in our API
+                      example: 404098
+                    value:
+                      type: string
+                      description: 2-digits lowercase country codes (ISO 3166, Alpha-2)
+                      example: in
+                    title:
+                      type: string
+                      description: Country title
+                      example: India
+    '401':
+      $ref: '../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../common/components/responses/RateLimit.yaml'

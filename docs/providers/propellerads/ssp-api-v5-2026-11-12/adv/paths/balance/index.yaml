@@ -1,0 +1,19 @@
+get:
+  summary: Getting balance
+  tags:
+    - finance
+  operationId: adv-balance
+  responses:
+    '200':
+      description: Balance
+      headers:
+        X-Request-Id:
+          $ref: '../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/Balance.yaml'
+    '401':
+      $ref: '../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../common/components/responses/RateLimit.yaml'

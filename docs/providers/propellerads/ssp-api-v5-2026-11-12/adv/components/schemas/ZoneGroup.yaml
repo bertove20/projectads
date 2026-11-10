@@ -1,0 +1,31 @@
+type: object
+properties:
+  id:
+    type: integer
+    example: 25
+  name:
+    type: string
+    example: My zone group
+  zone_ids:
+    type: array
+    items:
+      type: integer
+    example: [1, 2, 7]
+  created_at:
+    type: integer
+    description: Creation timestamp (Unix time)
+    example: 1760533011
+  modified_at:
+    type: integer
+    description: Last modification timestamp (Unix time)
+    example: 1766491707
+  campaigns_include:
+    type: array
+    description: List of campaigns in which this zone group is in include mode
+    items:
+      $ref: './ZoneGroupCampaignListItem.yaml'
+  campaigns_exclude:
+    type: array
+    description: List of campaigns in which this zone group is in exclude mode
+    items:
+      $ref: './ZoneGroupCampaignListItem.yaml'

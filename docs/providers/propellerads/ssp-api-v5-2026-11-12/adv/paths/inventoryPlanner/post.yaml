@@ -1,0 +1,117 @@
+summary: Getting recommended and maximum rates for a targeting
+tags:
+  - inventory-planner
+operationId: adv-inventory-planner
+description: >
+  Returns the recommended rate (`bestRate`), the maximum rate (`maxRate`), the "rate → volume" curve
+  and, for two or more countries, recommended rates per country.
+  Use it to pick a rate before creating a campaign or to check the rate of an existing one.
+  Rate limit: 150 requests per minute.
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../components/schemas/InventoryPlannerRequest.yaml'
+      examples:
+        onclick:
+          summary: OnClick, Smart CPM, US + DE
+          value:
+            direction: onclick
+            pricing_model: scpm
+            traffic_categories:
+              - propeller
+              - broker
+            country_id:
+              - 405138
+              - 404007
+        push:
+          summary: Push (Classic and In-Page), CPC, US
+          value:
+            direction: nativeads
+            pricing_model: cpc
+            traffic_categories:
+              - propeller
+              - broker
+            country_id:
+              - 405138
+        in_page_push:
+          summary: In-Page Push, CPC, DE
+          value:
+            country_id:
+              - 404007
+            zone_type:
+              - 42
+              - 119
+              - 78
+            direction: nativeads
+            pricing_model: cpc
+            traffic_categories:
+              - propeller
+        interactive_ads:
+          summary: Interactive Ads, Smart CPC
+          value:
+            direction: onclick
+            pricing_model: scpc
+            traffic_categories:
+              - all_survey
+        telegram_ads:
+          summary: Telegram Ads, CPC, Mobile + iOS
+          value:
+            direction: telegram_ads
+            pricing_model: cpc
+            traffic_categories:
+              - propeller
+            os_type_id:
+              - 208752
+            os_id:
+              - 208743
+        paid_social_traffic:
+          summary: Paid Social Traffic, Smart CPC
+          value:
+            direction: onclick
+            pricing_model: scpc
+            traffic_categories:
+              - meta_traffic
+responses:
+  '200':
+    description: Rates and traffic volume for the targeting
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas/InventoryPlannerResponse.yaml'
+        example:
+          axis:
+            x:
+              key: cpm
+              title: CPM
+            y:
+              key: impressions
+              title: Impressions
+          list:
+            - cpm: 0.5
+              impressions: "420000"
+              revenue_percent: 12
+            - cpm: 1.25
+              impressions: "1830000"
+              revenue_percent: 64
+            - cpm: 3.1
+              impressions: "2650000"
+              revenue_percent: 93
+          areas:
+            yellow: 1
+            green: 2
+          bestRate: 3.053
+          maxRate: 4.1
+          recommended_rates:
+            us: "3.120"
+            de: "2.480"
+  '400':
+    $ref: '../../../common/components/responses/ValidationErrors.yaml'
+  '401':
+    $ref: '../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../common/components/responses/RateLimit.yaml'

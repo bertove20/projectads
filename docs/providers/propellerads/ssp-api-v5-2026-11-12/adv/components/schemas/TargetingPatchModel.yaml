@@ -1,0 +1,42 @@
+type: object
+required:
+  - operation
+  - targeting
+properties:
+  operation:
+    type: string
+    enum: [ set, merge ]
+    description: |
+      What to do with the values of every listed dimension:
+      `set` replaces them, `merge` adds them to the current ones.
+      `connection`, `proxy`, `traffic_categories` and `uvc` hold a single choice, so `merge` replaces them too.
+      Dimensions that are not listed stay as they are.
+  targeting:
+    type: array
+    description: |
+      Dimensions to update. An empty `values` list removes the dimension, whatever the operation;
+      `connection` is removed with the `all` preset instead, and `traffic_categories` cannot be emptied.
+      A dimension written to this side is removed from the opposite one — its whole list, not only the given values.
+      `gpu` is included through the include `audience`: excluding audiences while GPUs are included is refused,
+      and a `gpu`-only request leaves the opposite `audience` as it is.
+      The request is validated as the side it results in: e.g. `os` requires `os_type` on the include side,
+      and the `os_type` the side already has counts. A problem the side already has before the request
+      is reported only when the request lists that targeting.
+    items:
+      type: object
+      properties:
+        targeting:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+example:
+  operation: merge
+  targeting:
+    - targeting: connection
+      values: [ "other" ]
+    - targeting: os_type
+      values: [ "mobile" ]
+    - targeting: os
+      values: [ "android" ]

@@ -1,0 +1,34 @@
+summary: Getting active rate by zone
+tags:
+  - campaigns
+description: Getting active rate by zone
+operationId: adv-campaigns-get-rates-by-zone
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+  - in: path
+    name: zoneId
+    description: Numeric ID of the zone
+    schema:
+      type: integer
+    required: true
+responses:
+  '200':
+    description: List of rates by zone
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../components/schemas/CampaignZoneRate.yaml'
+  '401':
+    $ref: '../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../common/components/responses/RateLimit.yaml'

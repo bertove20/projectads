@@ -1,0 +1,21 @@
+get:
+  summary: Get available time table (targeting)
+  tags:
+    - collections
+  description: Get available time table (targeting)
+  operationId: collections-targeting-time-table
+
+  responses:
+    '200':
+      description: Returned JSON array with available time table
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/CollectionResult.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

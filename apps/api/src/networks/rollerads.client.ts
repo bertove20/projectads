@@ -3,6 +3,7 @@
  * (docs/providers/rollerads/openapi-v2-2026-11-10.json, read.md Bagian 20).
  * Phase 2 = READ-ONLY. Aksi tulis (status, bid, budget, zone) menunggu approval workflow (Phase 6).
  */
+import { NetworkApiError } from './network-errors';
 import type { MinuteRateLimiter } from './rate-limiter';
 
 /** Batas resmi per token per menit (read.md 20.2). Dipakai sedikit di bawah batas. */
@@ -49,19 +50,8 @@ export interface RollerCampaignListItem {
   account_id: number;
 }
 
-export class RollerAdsError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly retryAfterSec?: number,
-  ) {
-    super(message);
-  }
-  /** 401/403 = token salah/dicabut → jangan di-retry. */
-  get isAuthError() {
-    return this.status === 401 || this.status === 403;
-  }
-}
+/** Error RollerAds = NetworkApiError (status, retryAfterSec, isAuthError). */
+export class RollerAdsError extends NetworkApiError {}
 
 export class RollerAdsClient {
   public requestCount = 0;

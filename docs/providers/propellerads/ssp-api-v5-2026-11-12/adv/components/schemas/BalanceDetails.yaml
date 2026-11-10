@@ -1,0 +1,52 @@
+type: object
+required:
+  - balance
+  - credit_limit
+  - available_funds
+  - can_launch_campaigns
+  - recent_top_ups
+  - min_deposit
+properties:
+  balance:
+    type: string
+    description: Current account balance in USD.
+    example: '96.00'
+  credit_limit:
+    type: string
+    description: Credit limit granted to the account in USD; `0.00` for prepaid accounts.
+    example: '0.00'
+  available_funds:
+    type: string
+    description: Balance plus credit limit in USD.
+    example: '96.00'
+  can_launch_campaigns:
+    type: boolean
+    description: >-
+      `true` while available funds are positive, so campaigns can be sent to moderation.
+      `false` means a start request is rejected and campaigns can only be saved as drafts
+      until funds are added.
+    example: true
+  recent_top_ups:
+    type: array
+    description: Up to three latest successful deposits of the last two years, newest first.
+    items:
+      type: object
+      required:
+        - amount
+        - date
+      properties:
+        amount:
+          type: string
+          description: Deposit amount in USD.
+          example: '96.00'
+        date:
+          type: string
+          format: date
+          example: '2026-10-26'
+  min_deposit:
+    type: string
+    nullable: true
+    description: >-
+      The smallest deposit in USD that any payment method enabled for the account accepts;
+      `null` when no method is enabled or the minimum cannot be read.
+    example: '100.00'

@@ -1,0 +1,116 @@
+type: object
+properties:
+  group_by:
+    type: array
+    items:
+      type: string
+      enum:
+        - product_id
+        - campaign_id
+        - banner_id
+        - zone_id
+        - country_id
+        - date_time
+        - hour
+        - device_id
+        - browser_id
+        - mobile_isp_id
+        - os_version_id
+        - os_id
+        - os_type_id
+        - language_id
+        - connection_id
+        - user_activity
+        - zone_type
+        - is_broker
+        - request_var_id
+    description: Field for grouping of statistics
+  day_from:
+    type: string
+    description: EST date (with optional time) FROM in YYYY-MM-DD or YYYY-MM-DD hh:mm:ss format.
+  day_to:
+    type: string
+    description: EST date (with optional time) TILL in YYYY-MM-DD or YYYY-MM-DD hh:mm:ss format.
+  tz:
+    $ref: '../../../common/components/schemas/Timezone.yaml'
+  product_id:
+    description: Numeric IDs of the products to get statistics
+    type: array
+    items:
+      type: integer
+  campaign_id:
+    description: Numeric IDs of the campaigns to get statistics
+    type: array
+    items:
+      type: integer
+  banner_id:
+    description: Numeric IDs of the creatives to get statistics
+    type: array
+    items:
+      type: integer
+  zone_id:
+    description: Numeric IDs of the zones to get statistics
+    type: array
+    items:
+      type: integer
+  geo:
+    description: 2-digits country codes to get statistics
+    type: array
+    items:
+      type: string
+  formats:
+    $ref: '../../components/schemas/Format.yaml'
+  status:
+    $ref: '../../components/schemas/CampaignStatus.yaml'
+  is_broker:
+    $ref: '../../components/schemas/TrafficType.yaml'
+  rate_model_id:
+    $ref: '../../components/schemas/RateModel.yaml'
+  format:
+    type: string
+    enum:
+      - json
+      - csv
+    default: json
+  order_by:
+    type: string
+    description: You can pass any response field for sorting
+  order_dest:
+    type: string
+    enum:
+      - asc
+      - desc
+    default: asc
+  impressions:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  conversions:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  conversions2:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  conversions3:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  clicks:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  ctr:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  cr:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+  spent:
+    $ref: '../../components/schemas/StatisticsFilter.yaml'
+required:
+  - group_by
+  - day_from
+  - day_to
+example:
+  group_by:
+    - banner_id
+  day_from: "2023-01-01 00:00:00"
+  day_to: "2023-01-05 23:59:59"
+  tz: "+0300"
+  campaign_id: [ 123 ]
+  geo: [ "IN", "US" ]
+  formats: [ "onclick", "telegram" ]
+  rate_model_id: [ "cpm", "cpc" ]
+  impressions: { "from": 1000 }
+  order_by: "impressions"
+  order_dest: "desc"

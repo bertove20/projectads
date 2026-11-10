@@ -1,0 +1,3 @@
+type: string
+description: "Alpha-2 country code in lowercase (ISO 3166)"
+example: "us"

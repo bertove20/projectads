@@ -1,0 +1,41 @@
+summary: Partial update of targeting
+tags:
+  - campaigns
+description: Updates only the listed targeting dimensions, the others stay as they are. Unlike PUT, which replaces the whole side.
+operationId: adv-campaigns-patch-targeting
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+  - in: path
+    name: type
+    description: Type of targeting ("include" - allowed targeting, "exclude" - forbidden targeting).
+    schema:
+      type: string
+    required: true
+    example: include
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../../components/schemas/TargetingPatchModel.yaml'
+responses:
+  '200':
+    description: Targeting changed
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../components/schemas/TargetingGetModel.yaml'
+  '401':
+    $ref: '../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../common/components/responses/RateLimit.yaml'

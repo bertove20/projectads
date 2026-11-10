@@ -1,0 +1,26 @@
+summary: Getting statistics
+tags:
+  - statistics
+operationId: adv-statistics
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../components/schemas/Statistics.yaml'
+responses:
+  '200':
+    description: Result of getting the statistics
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: array
+          items:
+            $ref: '../../components/schemas/StatResponseRow.yaml'
+  '401':
+    $ref: '../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../common/components/responses/RateLimit.yaml'

@@ -1,0 +1,40 @@
+summary: Setting the list of zones with excluded "Other" subzones
+tags:
+  - campaigns
+description: |
+  Replaces the **per-zone exclude** list for "Other" subzones. This API only writes to the
+  **exclude** side of targeting (`zero_request_var_id_zone`); other subzones remain **included
+  by default** when not listed.
+
+  If `zones` is non-empty, the global "All" flag (subzone ID `0` in `exclude.request_var_id`) is
+  removed automatically so mutual exclusivity holds. An empty `zones` clears per-zone exclusions.
+operationId: adv-campaigns-put-targeting-sub-zone-other
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../../../components/schemas/SubZoneOtherTargeting.yaml'
+responses:
+  '200':
+    description: Updated exclude state for Other subzones
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../../components/schemas/SubZoneOtherTargetingResponse.yaml'
+  '401':
+    $ref: '../../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../../common/components/responses/RateLimit.yaml'

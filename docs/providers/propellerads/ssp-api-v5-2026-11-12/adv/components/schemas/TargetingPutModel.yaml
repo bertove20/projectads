@@ -1,0 +1,22 @@
+type: object
+properties:
+  targeting:
+    type: array
+    description: "`os` requires `os_type` on the include side; every OS must belong to one of the listed `os_type` values."
+    items:
+      type: object
+      properties:
+        targeting:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+example:
+  targeting:
+    - targeting: os_type
+      values: [ "mobile" ]
+    - targeting: os
+      values: [ "android" ]
+    - targeting: uvc
+      values: [ "high_intent", "wide_reach" ]

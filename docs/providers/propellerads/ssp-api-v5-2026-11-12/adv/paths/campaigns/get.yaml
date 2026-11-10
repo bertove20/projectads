@@ -1,0 +1,158 @@
+summary: Campaigns list
+tags:
+  - campaigns
+operationId: adv-campaigns
+parameters:
+  - in: query
+    name: id[]
+    schema:
+      type: array
+      items:
+        type: integer
+    style: form
+    explode: true
+    required: false
+    description: Numeric IDs of the campaigns to get
+  - in: query
+    name: status[]
+    schema:
+      type: array
+      items:
+        type: integer
+    style: form
+    explode: true
+    required: false
+    description: >
+      Numeric statuses of the campaigns to get
+       * `1` - Draft
+       * `2` - Moderation pending
+       * `3` - Rejected
+       * `4` - Ready
+       * `6` - Working
+       * `7` - Paused
+       * `8` - Stopped
+       * `9` - Completed
+  - in: query
+    name: formats[]
+    schema:
+      type: array
+      items:
+        $ref: '../../components/schemas/Format.yaml'
+    style: form
+    explode: true
+    required: false
+    description: >
+      Advertising Format:
+        * `onclick` - Onclick (Popunder) ad format
+        * `ipp` - Push notification (In-Page Push) ad format
+        * `classic_push` - Push notification (Classic Push) ad format
+        * `survey` - Interactive Ads ad format
+        * `telegram` - Telegram ads format
+  - in: query
+    name: rate_model[]
+    schema:
+      type: array
+      items:
+        $ref: '../../components/schemas/RateModel.yaml'
+    style: form
+    explode: true
+    required: false
+    description: >
+      String IDs of the campaigns rate models to get, ex. cpm, cpa, scpm
+        * `cpm`  - Cost per mile
+        * `scpm` - Smart cost per mile
+        * `cpc`  - Cost per click
+        * `scpc` - Smart cost per click
+        * `scpa` - CPA Goal 2.0 (by impressions for OnClick)
+        * `cpag` - CPA Goal 2.0 (by clicks for Push)
+  - in: query
+    name: is_archived
+    schema:
+      type: integer
+      enum: [ 0, 1 ]
+    description: >
+      Filter campaigns by archived option:
+       * `0` - Not archived
+       * `1` - Archived
+    required: false
+  - in: query
+    name: page
+    schema:
+      type: integer
+      default: 1
+      minimum: 1
+    description: Result's page number
+    required: false
+  - in: query
+    name: page_size
+    schema:
+      type: integer
+      default: 100
+      minimum: 1
+      maximum: 1000
+    description: Result's page size
+    required: false
+responses:
+  '200':
+    description: Campaigns list
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            result:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  direction_id:
+                    type: integer
+                  name:
+                    type: string
+                  rate_model:
+                    type: string
+                  status:
+                    type: integer
+                  is_archived:
+                    type: integer
+                  limit_daily_amount:
+                    type: number
+                    nullable: true
+                  limit_total_amount:
+                    type: number
+                    nullable: true
+              description: Campaigns list.
+            meta:
+              $ref: '../../../common/components/schemas/Meta.yaml'
+          example:
+            result:
+              - id: 1
+                direction_id: 2
+                name: Example campaign 1
+                rate_model: cpa
+                status: 6
+                is_archived: 0
+                limit_daily_amount: null
+                limit_total_amount: null
+              - id: 2
+                direction_id: 61
+                name: Example campaign 2
+                rate_model: cpm
+                status: 7
+                is_archived: 1
+                limit_daily_amount: 10
+                limit_total_amount: 100
+            meta:
+              total_items: 2
+              total_pages: 1
+              page_size: 100
+              page: 1
+  '401':
+    $ref: '../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../common/components/responses/RateLimit.yaml'

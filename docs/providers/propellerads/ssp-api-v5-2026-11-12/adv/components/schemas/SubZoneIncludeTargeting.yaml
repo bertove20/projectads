@@ -1,0 +1,15 @@
+type: object
+description: |
+  Include targeting by subzone. Subzone ID `0` is not allowed here
+required:
+  - sub_zones
+properties:
+  sub_zones:
+    type: array
+    uniqueItems: true
+    description: List of allowed subzone IDs.
+    items:
+      type: integer
+      minimum: 1
+example:
+  sub_zones: [ 123, 456 ]

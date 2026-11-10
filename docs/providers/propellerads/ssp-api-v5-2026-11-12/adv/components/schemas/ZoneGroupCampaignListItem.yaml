@@ -1,0 +1,8 @@
+type: object
+properties:
+  id:
+    type: integer
+    example: 9695470
+  name:
+    type: string
+    example: "[OnClick (Popunder)] [CPAG] 9695470"

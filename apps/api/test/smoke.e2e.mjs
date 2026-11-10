@@ -235,7 +235,7 @@ async function main() {
   });
   check('campaign dipetakan ke external ID 9001', camp2.status === 201, camp2);
   const remote = await admin.get(`/network-accounts/${rnet.body.id}/remote-campaigns`);
-  check('daftar campaign RollerAds + status pemetaan', remote.status === 200 && remote.body.find((r) => r.campaign_id === 9001)?.mappedTo?.id === camp2.body.id, remote.body);
+  check('daftar campaign RollerAds + status pemetaan', remote.status === 200 && remote.body.find((r) => r.id === '9001')?.mappedTo?.id === camp2.body.id, remote.body);
 
   console.log('\n[13] Phase 2 — channel Telegram (mock)');
   const chan = await admin.post('/notification-channels', { name: `Tim Ads ${RUN}`, target: '-1001234567890', botToken: `123456:${'A'.repeat(35)}`, minSeverity: 'WARNING' });
@@ -444,6 +444,37 @@ async function main() {
   check('pengaturan consent & domain tambahan disimpan', consent.status === 200 && consent.body.requireConsent === true && consent.body.extraDomains.includes('partner-site.com'), consent.body);
   const bFunnel = await buyer.get(`/analytics/funnel?campaignId=${camp2.body.id}`);
   check('Media Buyer tidak bisa melihat funnel campaign di luar cakupannya', bFunnel.status === 403, bFunnel.status);
+
+  console.log('\n[19] Adapter PropellerAds (mock Propeller SSP API v5)');
+  const pnet = await admin.post('/network-accounts', { network: 'PROPELLERADS', name: `Propeller ${RUN}` });
+  const pBad = await admin.put(`/network-accounts/${pnet.body.id}/api-token`, { token: 'token-salah-propeller' });
+  check('token PropellerAds salah ditolak', pBad.status === 400 && pBad.body?.error?.message?.includes('PropellerAds'), pBad);
+  const pOk = await admin.put(`/network-accounts/${pnet.body.id}/api-token`, { token: 'test-propeller-token' });
+  check('token PropellerAds valid → laporan dalam UTC', pOk.status === 200 && pOk.body.account?.timezone === 'UTC', pOk);
+  const pCamp = await admin.post('/campaigns', { networkAccountId: pnet.body.id, name: `Propeller TH ${RUN}`, adFormat: 'ONCLICK', bidModel: 'SMART_CPM', targetCpa: '1', flowType: 'DIRECT', offerId: offer.body.id, externalCampaignId: '7001' });
+  check('campaign dipetakan ke campaign PropellerAds 7001', pCamp.status === 201, pCamp);
+  const pRemote = await admin.get(`/network-accounts/${pnet.body.id}/remote-campaigns`);
+  check('daftar campaign PropellerAds + status (working/paused)', pRemote.status === 200 && pRemote.body.find((r) => r.id === '7001')?.mappedTo?.id === pCamp.body.id && pRemote.body.find((r) => r.id === '7099')?.status === 'paused', pRemote.body);
+  const pStatsBefore = (await fetch(`${MOCK}/_received`).then((r) => r.json())).statsRequests;
+  await admin.post(`/network-accounts/${pnet.body.id}/sync`);
+  let prun = null;
+  for (let i = 0; i < 90; i++) {
+    await sleep(1000);
+    prun = (await admin.get(`/network-accounts/${pnet.body.id}/sync-runs`)).body?.[0];
+    if (prun && prun.status !== 'RUNNING') break;
+  }
+  check('sinkronisasi PropellerAds SUCCESS (4 hari = 4 request statistik)', prun?.status === 'SUCCESS' && prun?.requestCount === 4 && (await fetch(`${MOCK}/_received`).then((r) => r.json())).statsRequests - pStatsBefore === 4, prun);
+  check('campaign PropellerAds yang belum dipetakan dilaporkan', prun?.unmappedCampaigns?.includes('7099'), prun?.unmappedCampaigns);
+  const pSpend = (await admin.get(`/spend?campaignId=${pCamp.body.id}`)).body.filter((s) => s.source === 'API');
+  check('spend PropellerAds per hari = 5.00 USD (field "spent")', pSpend.length === 4 && pSpend.every((s) => Math.abs(Number(s.amount) - 5) < 1e-6 && s.currency === 'USD'), pSpend);
+  const pZones = await admin.get(`/campaigns/${pCamp.body.id}/zones?days=4`);
+  const z1 = pZones.body?.rows?.find((z) => z.zoneId === '880001');
+  check('zone PropellerAds tersinkron (spend & klik jaringan per zone)', z1?.spendSource === 'network' && Math.abs(z1.spend - 16.8) < 1e-6 && z1.networkClicks === 1200, z1);
+  const pRecon = await admin.get(`/analytics/reconciliation?networkAccountId=${pnet.body.id}&days=4`);
+  check('rekonsiliasi PropellerAds memakai UTC', pRecon.body?.timezone === 'UTC' && pRecon.body?.rows?.some((r) => r.campaignId === pCamp.body.id && r.networkClicks === 320), pRecon.body?.rows?.slice(0, 2));
+  const clickaduNet = await admin.post('/network-accounts', { network: 'CLICKADU', name: `Clickadu ${RUN}` });
+  const cTok = await admin.put(`/network-accounts/${clickaduNet.body.id}/api-token`, { token: 'apa-saja-12345' });
+  check('jaringan tanpa dokumentasi terverifikasi (Clickadu) menolak integrasi API', cTok.status === 400 && cTok.body?.error?.code === 'API_NOT_SUPPORTED', cTok);
 
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;

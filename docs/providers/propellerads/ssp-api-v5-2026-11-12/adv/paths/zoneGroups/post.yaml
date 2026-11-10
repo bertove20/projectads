@@ -1,0 +1,20 @@
+summary: Create a zone group
+tags:
+  - zone-groups
+operationId: adv-zone-groups-create
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../components/schemas/ZoneGroupUpsertRequest.yaml'
+responses:
+  "201":
+    description: Just created zone group
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas/ZoneGroup.yaml'

@@ -1620,3 +1620,42 @@ Jangan mendesain ulang modul yang tidak terkait tanpa alasan.
 - Bila pengujian visual berbasis browser tersedia, periksa screenshot di beberapa ukuran viewport dan perbaiki masalah layout yang terlihat.
 
 Tujuan akhirnya bukan sekadar layar yang menarik, tetapi aplikasi enterprise yang khas, praktis, mudah dirawat, dan terasa dirancang dengan sengaja oleh desainer produk berpengalaman.
+
+## 20B. INTEGRASI PROPELLERADS (TERVERIFIKASI)
+
+Sumber: spesifikasi OpenAPI resmi "Propeller SSP API" v5 di https://ssp-api.propellerads.com/v5/docs/ (diperiksa 12 November 2026). Seluruh file spesifikasi (146 file YAML, termasuk `$ref`) disimpan di `docs/providers/propellerads/ssp-api-v5-2026-11-12/`.
+
+### 20B.1 Dasar Koneksi
+
+- Base URL: `https://ssp-api.propellerads.com/v5`
+- Autentikasi: Bearer token (`Authorization: Bearer <token>`), dibuat di halaman Profile akun SSP.
+- Uji koneksi: `GET /adv/balance` (API tidak memiliki endpoint "whoami").
+- Rate limit: spesifikasi menyebut header `X-RateLimit-Limit/Remaining/Reset` per menit tanpa angka pasti → platform memakai batas lokal konservatif 30 request/menit dan menghormati `429`.
+
+### 20B.2 Capability Matrix PropellerAds
+
+| Capability | Status | Endpoint | Phase |
+|---|---|---|---|
+| Uji token | ✅ | `GET /adv/balance` | 3 |
+| Daftar campaign (status 1 draft, 2 moderation, 3 rejected, 6 working, 7 paused, 8 stopped) | ✅ | `GET /adv/campaigns` | 3 |
+| Statistik / spend per campaign × zone per hari | ✅ | `GET /adv/statistics` (`group_by[]=campaign_id&group_by[]=zone_id`, `tz=+0000`) | 3 |
+| Play / stop campaign | ✅ tersedia di API | `PUT /adv/campaigns/play`, `/stop` | 6, dengan approval |
+| Include/exclude zone & sub-zone | ✅ tersedia di API | `/adv/campaigns/{id}/targeting/include|exclude/zone` | 6, dengan approval |
+| Bid per zone | ✅ tersedia di API | `/adv/campaigns/{id}/zone_rates` | 6, dengan approval |
+| Format URL postback & macro | ⚠️ tidak ada di spesifikasi API | – | Ambil dari dashboard PropellerAds |
+
+### 20B.3 Keputusan & Asumsi (perlu dikonfirmasi dengan token asli)
+
+- **Zona waktu**: statistik diminta dengan `tz=+0000`, sehingga tanggal laporan = UTC. Rekonsiliasi memakai UTC.
+- **Mata uang**: `GET /adv/balance` hanya mengembalikan angka tanpa mata uang → spend dianggap **USD**.
+- **Spend**: field `spent` (tanpa PPN); `spent_with_vat` tidak dipakai.
+- **Negara**: format nilai `country_id` tidak dijelaskan di spesifikasi → statistik PropellerAds belum dipecah per negara (kolom negara kosong). Ditambahkan setelah format dikonfirmasi lewat `/collections/countries`.
+- **zone_id pada baris respons**: `zone_id` adalah nilai `group_by` resmi, tetapi tidak tercantum pada skema `StatResponseRow` → dibaca secara defensif; verifikasi pada sinkronisasi pertama dengan token asli.
+- Respons statistik didefinisikan sebagai *array* `StatResponseWrapped`; adapter juga menerima objek tunggal.
+
+### 20B.4 Jaringan Lain
+
+| Jaringan | Status dokumentasi | Tindakan |
+|---|---|---|
+| Clickadu | Hanya artikel help center yang saling bertentangan (host `ssp.clickadu.com` vs `v2.api.clickadu.com`), batas 200 request/jam | Minta dokumentasi versi terbaru ke account manager; integrasi API ditolak sampai terverifikasi |
+| EvaDav | Dokumentasi API 2.2 hanya lewat personal manager | Sama seperti di atas |

@@ -1,0 +1,148 @@
+summary: Getting statistics with pagination
+tags:
+  - statistics
+operationId: adv-statistics-with-pagination
+parameters:
+  - in: query
+    name: group_by[]
+    schema:
+      type: array
+      items:
+        type: string
+        enum:
+          - product_id
+          - campaign_id
+          - banner_id
+          - zone_id
+          - country_id
+          - date_time
+          - hour
+          - device_id
+          - browser_id
+          - mobile_isp_id
+          - os_version_id
+          - os_id
+          - os_type_id
+          - language_id
+          - connection_id
+          - user_activity
+          - is_broker
+          - request_var_id
+    required: true
+    description: Field for grouping of statistics
+  - in: query
+    name: day_from
+    schema:
+      type: string
+    required: true
+    description: EST date (with optional time) FROM in YYYY-MM-DD or YYYY-MM-DD hh:mm:ss format.
+  - in: query
+    name: day_to
+    schema:
+      type: string
+    required: true
+    description: EST date (with optional time) TILL in YYYY-MM-DD or YYYY-MM-DD hh:mm:ss format.
+  - in: query
+    name: tz
+    schema:
+      $ref: '../../../common/components/schemas/Timezone.yaml'
+    description: UTC time offset
+  - in: query
+    name: product_id[]
+    schema:
+      type: array
+      items:
+        type: integer
+    description: Numeric IDs of the products to get statistics.
+  - in: query
+    name: campaign_id[]
+    schema:
+      type: array
+      items:
+        type: integer
+    description: Numeric IDs of the campaigns to get statistics.
+  - in: query
+    name: banner_id[]
+    schema:
+      type: array
+      items:
+        type: integer
+    description: Numeric IDs of the creatives to get statistics.
+  - in: query
+    name: zone_id[]
+    schema:
+      type: array
+      items:
+        type: integer
+    description: Numeric IDs of the zones to get statistics.
+  - in: query
+    name: geo[]
+    schema:
+      type: array
+      items:
+        type: string
+    description: 2-digits country codes to get statistics.
+  - in: query
+    name: formats[]
+    schema:
+      $ref: '../../components/schemas/Format.yaml'
+    description: "Advertising format"
+  - in: query
+    name: status[]
+    schema:
+      $ref: '../../components/schemas/CampaignStatus.yaml'
+    description: 1 – draft; 2 – moderation; 3 – rejected; 6 – working; 7 – paused; 8 – stopped
+  - in: query
+    name: is_broker
+    schema:
+      $ref: '../../components/schemas/TrafficType.yaml'
+    description: "Broker type: 0 for any; 1 for propeller, 2 - for brokers"
+  - in: query
+    name: rate_model_id[]
+    schema:
+      $ref: '../../components/schemas/RateModel.yaml'
+    description: scpm for SmartCPM; scpa for CPA Goal 2.0 (in OnClick); cpag for CPA Goal (in other directions); scpc for Smart CPC
+  - in: query
+    name: format
+    schema:
+      type: string
+      enum:
+        - json
+        - csv
+    description: You can format response as JSON or CSV, json is set by default
+  - in: query
+    name: order_by
+    schema:
+      type: string
+    description: You can pass any response field for sorting
+  - in: query
+    name: order_dest
+    schema:
+      type: string
+      enum:
+        - asc
+        - desc
+    description: Order direction
+  - in: query
+    name: page
+    schema:
+      type: number
+    description: Result set page number, starting from 1
+  - in: query
+    name: per_page
+    schema:
+      type: number
+    description: Result set page size, 20k max
+
+responses:
+  '200':
+    description: Result of getting the statistics
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: array
+          items:
+            $ref: '../../components/schemas/StatResponseWrapped.yaml'

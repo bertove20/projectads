@@ -1,0 +1,20 @@
+type: object
+properties:
+  id:
+    type: integer
+  campaign_id:
+    type: number
+  amount:
+    type: number
+    description: In dollars
+  started_at:
+    type: integer
+    description: Unix timestamp
+  finished_at:
+    type: integer
+    nullable: true
+    description: Unix timestamp (null is infinite)
+  countries:
+    type: array
+    items:
+      type: string

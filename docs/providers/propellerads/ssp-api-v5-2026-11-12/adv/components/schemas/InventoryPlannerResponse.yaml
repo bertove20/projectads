@@ -1,0 +1,112 @@
+type: object
+required:
+  - axis
+  - list
+  - areas
+  - maxRate
+  - bestRate
+properties:
+  axis:
+    type: object
+    description: >
+      Keys of the rate and volume fields in the `list` items:
+      `cpm` / `impressions` for `cpm` and `scpm`, `cpc` / `clicks` for `cpc` and `scpc`.
+    properties:
+      x:
+        type: object
+        properties:
+          key:
+            type: string
+            enum:
+              - cpm
+              - cpc
+            example: cpm
+          title:
+            type: string
+            example: CPM
+      y:
+        type: object
+        properties:
+          key:
+            type: string
+            enum:
+              - impressions
+              - clicks
+            example: impressions
+          title:
+            type: string
+            example: Impressions
+  list:
+    type: array
+    description: >
+      "Rate → volume" curve. Points are sorted by rate ascending.
+      The list is empty when there is no traffic for the targeting.
+    items:
+      type: object
+      properties:
+        cpm:
+          type: number
+          format: float
+          description: Rate in USD per 1000 impressions. Present when `axis.x.key` is `cpm`.
+          example: 1.25
+        impressions:
+          type: string
+          description: Impressions at this rate. Present when `axis.y.key` is `impressions`.
+          example: "1830000"
+        cpc:
+          type: number
+          format: float
+          description: Rate in USD per click. Present when `axis.x.key` is `cpc`.
+        clicks:
+          type: string
+          description: Clicks at this rate. Present when `axis.y.key` is `clicks`.
+        revenue_percent:
+          type: number
+          example: 64
+  areas:
+    type: object
+    description: >
+      Indexes of `list` items where the yellow and green ranges start.
+      Points before `yellow` form the red range, from `yellow` to `green` - the yellow range,
+      from `green` to the end - the green range. Both are `0` when `list` is empty.
+    properties:
+      yellow:
+        type: integer
+        example: 15
+      green:
+        type: integer
+        example: 18
+  bestRate:
+    type: number
+    format: float
+    description: >
+      Recommended rate in USD for the targeting. Not higher than `maxRate`.
+    example: 3.053
+  maxRate:
+    type: number
+    format: float
+    maximum: 500
+    description: >
+      Maximum rate in USD for the targeting.
+    example: 4.1
+  recommended_rates:
+    type: object
+    description: >
+      Recommended rates by country. Keys are lowercase country codes (ISO 3166-1 alpha-2),
+      values are rates in USD.
+      For Interactive Ads (`traffic_categories: ["all_survey"]`) values are numbers (e.g. `0.312`),
+      for other formats values are strings with 3 decimals (e.g. `"3.120"`).
+      Returned only when two or more countries are passed in `country_id`.
+      Countries without traffic data are missing from the object.
+    additionalProperties:
+      oneOf:
+        - type: string
+          description: Rate with 3 decimals. All formats except Interactive Ads.
+          example: "3.120"
+        - type: number
+          format: float
+          description: Rate. Interactive Ads only.
+          example: 0.312
+    example:
+      us: "3.120"
+      de: "2.480"

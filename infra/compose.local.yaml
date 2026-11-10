@@ -6,6 +6,7 @@
 
 x-mocks: &mocks
   ROLLERADS_API_BASE: http://mock-network:4900/v2
+  PROPELLERADS_API_BASE: http://mock-network:4900/propeller/v5
   TELEGRAM_API_BASE: http://mock-network:4900/telegram
   RECON_MIN_CLICKS: "50"
 

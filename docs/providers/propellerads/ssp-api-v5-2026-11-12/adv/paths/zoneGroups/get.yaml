@@ -1,0 +1,16 @@
+summary: List zone groups
+tags:
+  - zone-groups
+operationId: adv-zone-groups-list
+responses:
+  '200':
+    description: List of zone groups
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: array
+          items:
+            $ref: '../../components/schemas/ZoneGroup.yaml'

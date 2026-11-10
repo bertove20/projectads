@@ -9,10 +9,13 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { isValidTimezone, recentDates } from '../common/tz';
 import { ENV, Env } from '../config/env';
 import { MinuteRateLimiter } from './rate-limiter';
-import { RollerAdsClient, RollerAdsError, RollerStatRow } from './rollerads.client';
+import { API_SUPPORTED_NETWORKS, createAdapter, NetworkAdapter, NormalizedStatRow } from './adapters';
+import { NetworkApiError } from './network-errors';
 
-/** Jaringan yang integrasi API-nya sudah diverifikasi dari dokumentasi resmi (read.md 20). */
-export const API_SUPPORTED_NETWORKS = ['ROLLERADS'] as const;
+/** Jaringan yang integrasi API-nya sudah diverifikasi dari dokumentasi resmi (read.md 20, 20B). */
+export { API_SUPPORTED_NETWORKS };
+
+const NETWORK_NAME: Record<string, string> = { ROLLERADS: 'RollerAds', PROPELLERADS: 'PropellerAds' };
 
 export interface SyncResult {
   status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
@@ -37,8 +40,8 @@ export class NetworkSyncService {
     this.limiter = new MinuteRateLimiter(redis);
   }
 
-  clientFor(account: Pick<NetworkAccount, 'id'>, token: string) {
-    return new RollerAdsClient(this.env.ROLLERADS_API_BASE, token, this.limiter, account.id);
+  adapterFor(account: Pick<NetworkAccount, 'id' | 'network'>, token: string): NetworkAdapter {
+    return createAdapter(account.network, account.id, token, { rolleradsBase: this.env.ROLLERADS_API_BASE, propellerBase: this.env.PROPELLERADS_API_BASE, limiter: this.limiter });
   }
 
   async tokenFor(networkAccountId: string): Promise<string | null> {
@@ -64,7 +67,9 @@ export class NetworkSyncService {
     });
     if (running) return { status: 'SUCCESS', rows: 0, requests: 0, unmapped: [], pendingDates: [] };
 
-    const tz = isValidTimezone(account.networkTimezone) ? account.networkTimezone : 'UTC';
+    const client = this.adapterFor(account, token);
+    // Zona waktu laporan: ditentukan adapter (mis. PropellerAds diminta dalam UTC) atau zona waktu akun jaringan
+    const tz = client.fixedReportTimezone ?? (isValidTimezone(account.networkTimezone) ? account.networkTimezone : 'UTC');
     const dates = recentDates(tz, this.env.SYNC_LOOKBACK_DAYS);
     const run = await this.prisma.syncRun.create({
       data: {
@@ -76,7 +81,6 @@ export class NetworkSyncService {
       },
     });
 
-    const client = this.clientFor(account, token);
     const campaigns = await this.prisma.campaign.findMany({
       where: { networkAccountId: account.id, externalCampaignId: { not: null } },
       select: { id: true, externalCampaignId: true },
@@ -85,7 +89,7 @@ export class NetworkSyncService {
     const unmapped = new Set<string>();
     const pendingDates: string[] = [];
     let rowsTotal = 0;
-    const currency = account.networkCurrency ?? 'USD';
+    const currency = account.networkCurrency ?? client.defaultCurrency ?? 'USD';
 
     try {
       for (const date of dates) {
@@ -101,19 +105,19 @@ export class NetworkSyncService {
       await this.checkReconciliation(account, dates.slice(0, -1), tz);
       return { status, rows: rowsTotal, requests: client.requestCount, unmapped: [...unmapped], pendingDates };
     } catch (err) {
-      const message = err instanceof RollerAdsError ? err.message : `${(err as Error).name}: ${(err as Error).message}`;
+      const message = err instanceof NetworkApiError ? err.message : `${(err as Error).name}: ${(err as Error).message}`;
       await this.finish(run.id, account.id, 'FAILED', client.requestCount, rowsTotal, [...unmapped], message);
       await this.alerts.raise({
         organizationId: account.organizationId,
         type: 'NETWORK_SYNC_FAILED',
-        severity: err instanceof RollerAdsError && err.isAuthError ? 'HIGH' : 'WARNING',
+        severity: err instanceof NetworkApiError && err.isAuthError ? 'HIGH' : 'WARNING',
         title: `Sinkronisasi ${account.name} gagal`,
-        body: err instanceof RollerAdsError && err.isAuthError ? 'Token API ditolak RollerAds. Periksa atau ganti token di menu Jaringan Iklan.' : message,
+        body: err instanceof NetworkApiError && err.isAuthError ? `Token API ditolak ${NETWORK_NAME[account.network] ?? account.network}. Periksa atau ganti token di menu Jaringan Iklan.` : message,
         dedupeKey: `sync-failed:${account.id}`,
         entityType: 'network_account',
         entityId: account.id,
       });
-      if (err instanceof RollerAdsError && err.isAuthError) throw new UnrecoverableError(message);
+      if (err instanceof NetworkApiError && err.isAuthError) throw new UnrecoverableError(message);
       throw err;
     }
   }
@@ -122,7 +126,7 @@ export class NetworkSyncService {
   private async storeDay(
     account: NetworkAccount,
     date: string,
-    rows: RollerStatRow[],
+    rows: NormalizedStatRow[],
     campaignMap: Map<string, string>,
     currency: string,
     unmapped: Set<string>,
@@ -131,16 +135,16 @@ export class NetworkSyncService {
     // Gabungkan baris dengan kunci sama (jaga-jaga bila API mengembalikan duplikat)
     const merged = new Map<string, Prisma.NetworkStatDailyCreateManyInput>();
     for (const r of rows) {
-      const ext = String(r.campaign_id);
-      const zone = r.zone_id ? String(r.zone_id) : '';
-      const country = /^[A-Za-z]{2}$/.test(r.country_iso2 ?? '') ? r.country_iso2.toUpperCase() : '';
+      const ext = r.externalCampaignId;
+      const zone = r.zoneId;
+      const country = r.country;
       const key = `${ext}|${zone}|${country}`;
       const prev = merged.get(key);
-      const spend = Number(r.amt_imoney) || 0;
+      const spend = r.spend;
       if (prev) {
-        prev.impressions = (prev.impressions ?? 0) + (r.cnt_impression || 0);
-        prev.clicks = (prev.clicks ?? 0) + (r.cnt_click || 0);
-        prev.conversions = (prev.conversions ?? 0) + (r.cnt_conversion || 0);
+        prev.impressions = (prev.impressions ?? 0) + r.impressions;
+        prev.clicks = (prev.clicks ?? 0) + r.clicks;
+        prev.conversions = (prev.conversions ?? 0) + r.conversions;
         prev.spend = new Prisma.Decimal(prev.spend as Prisma.Decimal).plus(spend);
         continue;
       }
@@ -154,9 +158,9 @@ export class NetworkSyncService {
         campaignId,
         zoneId: zone,
         country,
-        impressions: r.cnt_impression || 0,
-        clicks: r.cnt_click || 0,
-        conversions: r.cnt_conversion || 0,
+        impressions: r.impressions,
+        clicks: r.clicks,
+        conversions: r.conversions,
         spend: new Prisma.Decimal(spend),
         currency,
       });

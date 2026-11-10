@@ -1,0 +1,9 @@
+type: object
+description: key -> targeting title, value -> list of targeting values.
+example:
+  os: [ "android" ]
+  os_type: [ "mobile" ]
+  connection: [ "mobile", "wireless" ]
+  time_table: [ "Fri00", "Fri01", "Fri02", "Fri03" ]
+  device_type: [ "phone" ]
+  uvc: [ "high_intent", "wide_reach" ]

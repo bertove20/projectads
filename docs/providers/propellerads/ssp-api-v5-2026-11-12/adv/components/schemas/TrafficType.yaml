@@ -1,0 +1,6 @@
+type: integer
+enum:
+  - 0
+  - 1
+  - 2
+description: "Broker type: 0 for any; 1 for propeller, 2 - for brokers"

@@ -1,0 +1,18 @@
+type: object
+description: |
+  Per-zone **exclude** targeting for "Other" subzones (`zero_request_var_id_zone` in storage).
+
+  **Semantics:** "Other" subzones are **included by default** (no targeting row). This API only
+  manages **exclusions**—there is no separate `include` mode for `sub_zone_other`. PUT and PATCH
+  add or replace zone IDs in the campaign **exclude** block; clearing the list removes those
+  exclusions (Other is available again for those zones).
+properties:
+  zones:
+    type: array
+    description: |
+      Zone IDs for which "Other" subzones are **excluded** (stored under `exclude.zero_request_var_id_zone`).
+    items:
+      type: integer
+      uniqueItems: true
+example:
+  zones: [ 9999990, 9999991 ]

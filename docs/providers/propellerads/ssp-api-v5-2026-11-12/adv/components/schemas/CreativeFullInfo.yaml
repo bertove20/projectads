@@ -1,0 +1,30 @@
+type: object
+properties:
+  id:
+    type: integer
+  user_status:
+    type: integer
+  policy_status:
+    type: integer
+  icon:
+    type: string
+  image:
+    type: string
+  title:
+    type: string
+  description:
+    type: string
+  frequency:
+    type: integer
+  capping:
+    type: integer
+example:
+  id: 1
+  user_status: 1
+  policy_status: 1
+  icon: 'base64string'
+  image: null
+  title: 'Creative title'
+  description: 'Creative description'
+  frequency: 1
+  capping: 24

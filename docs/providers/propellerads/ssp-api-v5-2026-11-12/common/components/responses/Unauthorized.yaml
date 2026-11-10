@@ -1,0 +1,4 @@
+description: Unauthorized
+headers:
+  X-Request-Id:
+    $ref: '../headers/xRequestId.yaml'

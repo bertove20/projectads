@@ -1,0 +1,156 @@
+type: object
+required:
+  - direction
+properties:
+  direction:
+    type: string
+    enum:
+      - onclick
+      - nativeads
+      - telegram_ads
+    description: >
+      Ad format to estimate traffic for.
+        * `onclick` - OnClick (Popunder), Interactive Ads (with `traffic_categories: ["all_survey"]`),
+          Paid Social Traffic (with `traffic_categories: ["meta_traffic"]`)
+        * `nativeads` - Push Notifications and In-Page Push
+        * `telegram_ads` - Telegram Ads
+    example: onclick
+  pricing_model:
+    type: string
+    enum:
+      - cpm
+      - scpm
+      - cpc
+      - scpc
+    default: cpm
+    description: >
+      Rate model of the future campaign. OnClick uses `cpm` / `scpm`; Push, Telegram Ads, Interactive Ads and Paid Social Traffic use `cpc` / `scpc`.
+        * `cpm` - Cost per mille
+        * `scpm` - Smart cost per mille
+        * `cpc` - Cost per click
+        * `scpc` - Smart cost per click
+    example: cpm
+  traffic_categories:
+    type: array
+    items:
+      type: string
+      enum:
+        - propeller
+        - broker
+        - premium
+        - all_survey
+        - social_traffic
+        - meta_traffic
+    default:
+      - propeller
+    description: >
+      Traffic categories to estimate traffic for. Values of the `/collections/targeting/traffic_categories` collection.
+        * `propeller` - Exclusive traffic
+        * `broker` - Partner traffic
+        * `premium` - Direct Click. OnClick only. Pass it as the only value
+        * `all_survey` - Interactive Ads
+        * `social_traffic` - Organic Social Traffic
+        * `meta_traffic` - Paid Social Traffic
+    example:
+      - propeller
+      - broker
+  country_id:
+    type: array
+    items:
+      type: integer
+    description: >
+      Country IDs from `/collections/countries`. Empty means worldwide.
+      Pass two or more countries to get `recommended_rates` per country in the response.
+    example:
+      - 405138
+      - 404007
+  os_type_id:
+    type: array
+    items:
+      type: integer
+    description: OS type IDs from `/collections/targeting/os_type`
+  os_id:
+    type: array
+    items:
+      type: integer
+    description: OS IDs from `/collections/targeting/os`
+  os_version_id:
+    type: array
+    items:
+      type: integer
+    description: OS version IDs from `/collections/targeting/os_version`
+  browser_id:
+    type: array
+    items:
+      type: integer
+    description: Browser IDs from `/collections/targeting/browser`
+  device_id:
+    type: array
+    items:
+      type: integer
+      enum:
+        - 404101
+        - 404102
+    description: >
+      Device IDs from `/collections/targeting/device`.
+        * `404101` - iPad
+        * `404102` - iPhone
+  mobile_isp_id:
+    type: array
+    items:
+      type: integer
+    description: Mobile ISP IDs from `/collections/targeting/mobile_isp`
+  language_id:
+    type: array
+    items:
+      type: integer
+    description: Language IDs from `/collections/targeting/language`
+  zone_id:
+    type: array
+    items:
+      type: integer
+    description: Zone IDs from `/collections/targeting/zone`
+  zone_type:
+    type: array
+    items:
+      type: integer
+    description: >
+      Zone type IDs. For `nativeads`:
+        * `[42, 119, 78]` - In-Page Push only
+        * `[42, 119, 78, 135, 136]` with `exclude: ["zone_type"]` - Classic Push only
+        * omit the field - both Classic Push and In-Page Push
+  user_activity:
+    type: array
+    items:
+      type: integer
+      enum:
+        - 1
+        - 2
+        - 3
+    description: >
+      User activity levels. Empty means all levels.
+        * `1` - High
+        * `2` - Medium
+        * `3` - Low
+  audience_id:
+    type: array
+    items:
+      type: integer
+    description: Audience IDs from `/collections/targeting/audience`
+  exclude:
+    type: array
+    items:
+      type: string
+      enum:
+        - zone_type
+        - language_id
+        - zone_id
+        - browser_id
+        - mobile_isp_id
+        - os_version_id
+        - device_id
+    description: >
+      Targetings listed here exclude the passed values.
+      For targetings not listed here, only the passed values are included.
+    example:
+      - zone_id

@@ -1,0 +1,109 @@
+post:
+  summary: Add existing creatives
+  tags:
+    - campaigns
+  description: >-
+    Adds copies of creatives you already have - in this or any other of your campaigns - to the campaign,
+    so the pictures do not have to be uploaded again. Each copy is a new creative with the texts, pictures,
+    icon, buttons and skin of the original; targeting, the target URL, frequency and capping are those of the campaign.
+    A copy is active or stopped as its original is, and is handled like a newly uploaded creative: a working, paused
+    or stopped campaign is sent to moderation again, unless your account starts campaigns without moderation, in which
+    case it becomes ready to run. A stopped campaign does not stay stopped either. A draft or rejected campaign keeps
+    its status. Sending a campaign to moderation counts as a campaign launch against your daily limit
+    of launches; once the limit is reached, the request is refused with "Campaign launch limit exceeded per day".
+    The original creatives are not changed.
+    <br><br>
+    A creative can be copied from an archived campaign too.
+    <br><br>
+    A creative can be copied only between campaigns of the same format: Push Notifications to Push Notifications,
+    Telegram Ads to Telegram Ads, Display Interstitial to Display Interstitial, Interstitial to Interstitial.
+    Auto creatives, creatives rejected by moderation, landing page creatives and creatives of campaigns created by your
+    account manager cannot be copied.
+    A campaign holds at most 8 creatives.
+    <br><br>
+    The request is applied whole or not at all: if any creative cannot be copied, or the request fails half way,
+    no creative is added and the campaign is not changed.
+  operationId: adv-campaigns-add-existing-creatives
+  parameters:
+    - in: path
+      name: campaignId
+      description: Numeric ID of the campaign to add the creatives to
+      schema:
+        type: integer
+      required: true
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          additionalProperties: false
+          required:
+            - creative_ids
+          properties:
+            creative_ids:
+              type: array
+              description: IDs of the creatives to copy. Each ID at most once.
+              minItems: 1
+              maxItems: 8
+              uniqueItems: true
+              items:
+                type: integer
+                minimum: 1
+          example:
+            creative_ids: [ 111, 222 ]
+  responses:
+    '200':
+      description: The creatives are added.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              creative_ids:
+                type: array
+                description: IDs of the new creatives, in the order of `creative_ids` of the request.
+                items:
+                  type: integer
+          example:
+            success: true
+            creative_ids: [ 333, 444 ]
+    '400':
+      description: >-
+        Invalid request body (`message` is "Bad parameters", `errors` holds the details), or a creative cannot be added
+        to the campaign (`message` names the creative and the reason): the campaign does not take creatives,
+        has no creatives yet or has no room for all of them ("Maximum creatives count exceeded for campaign."), or the creative is of another
+        format (the message names both formats), of a size the campaign does not take, an auto creative, a creative
+        rejected by moderation or a landing page creative. A campaign that cannot be sent back to moderation is refused
+        as well, for example "Campaign launch limit exceeded per day".
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../../../../common/components/schemas/Errors.yaml'
+    '401':
+      $ref: '../../../../../../common/components/responses/Unauthorized.yaml'
+    '403':
+      description: >-
+        The campaign was created by your account manager, or a creative belongs to such a campaign (the response
+        has a `hint` naming the creative and its campaign); the campaign is archived and cannot be edited any more;
+        or adding existing creatives is not available for your account.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+    '404':
+      description: >-
+        The campaign is not found, or some of the creatives are not found (`message` lists their IDs, for example
+        "Creatives not found: 111, 222."). A creative of another account is reported as not found.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../../common/components/headers/xRequestId.yaml'
+    '429':
+      $ref: '../../../../../../common/components/responses/RateLimit.yaml'

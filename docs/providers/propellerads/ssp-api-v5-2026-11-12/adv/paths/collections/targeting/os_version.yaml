@@ -1,0 +1,21 @@
+get:
+  summary: Get available operation system versions (targeting)
+  tags:
+    - collections
+  description: Get available operation system versions (targeting)
+  operationId: collections-targeting-os-version
+
+  responses:
+    '200':
+      description: Returned JSON array with available operation system versions
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/CollectionResult.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

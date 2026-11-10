@@ -1,0 +1,20 @@
+type: object
+properties:
+  amount:
+    type: number
+    description: In dollars
+  started_at:
+    type: integer
+    description: Unix timestamp
+  finished_at:
+    type: integer
+    nullable: true
+    description: Unix timestamp (null is infinite)
+  zone_id:
+    type: integer
+    description: Zone Id
+example:
+  amount: 1.23
+  started_at: 1516086000
+  finished_at: 1516100399
+  zone_id: 1234567

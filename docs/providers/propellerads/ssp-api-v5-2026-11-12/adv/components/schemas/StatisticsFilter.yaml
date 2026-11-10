@@ -1,0 +1,8 @@
+type: object
+properties:
+  from:
+    type: integer
+    minimum: 0
+  to:
+    type: integer
+    minimum: 0

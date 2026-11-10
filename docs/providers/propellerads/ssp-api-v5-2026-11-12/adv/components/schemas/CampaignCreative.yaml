@@ -1,0 +1,78 @@
+type: object
+properties:
+  template_id:
+    type: integer
+    enum: [ 10000000 ]
+    description: "Supported for Interstitial. Only the iframe landing template is available."
+  skin:
+    type: string
+    description: "Supported for In-Page Push."
+    enum:
+      - "auto"
+      - "default"
+      - "social"
+      - "light_theme"
+  icon:
+    type: string
+  image:
+    type: string
+  default_button_disabled:
+    type: boolean
+  buttons:
+    type: array
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+  title:
+    type: string
+    minLength: 1
+  #          maxLength: 30 # for Push
+  #          maxLength: 80 # for Interstitial
+  description:
+    type: string
+    minLength: 1
+  #          maxLength: 40 # for Push
+  #          maxLength: 50 # for Interstitial
+  frequency:
+    $ref: '../../components/schemas/Frequency.yaml'
+  capping:
+    $ref: '../../components/schemas/Capping.yaml'
+  click_frequency:
+    $ref: '../../components/schemas/Frequency.yaml'
+  click_capping:
+    $ref: '../../components/schemas/Capping.yaml'
+  status:
+    type: integer
+    enum: [ 1, 2 ]
+    description: '1 = active; 2 = disabled.'
+  landing_url:
+    type: string
+    maximum: 200
+    description: "Landing URL for interstitial campaigns"
+  is_auto:
+    type: boolean
+    description: "Use this flag to make autocreative. Do not fill in any fields other than status, language_mode and language when using this flag. Available for Push campaigns only."
+  language_mode:
+    type: string
+    enum: ['by_geo', 'by_browser', 'custom']
+    description: 'Manage autocreative language by several modes: by_geo - based on geo targeting, by_browser - based on browser language, custom - based on value of language field. Available for Push campaigns only.'
+  language:
+    type: string
+    description: 'Set the required autocreative language based on the ISO 639-1 standard. Only available if language_mode=custom. Available for Push campaigns only.'
+required:
+  - icon # Required for Push
+  - image # Required for Interstitial
+  - title
+  - description # Required for Interstitial
+example:
+  icon: 'base64string'
+  image: 'base64string'
+  title: 'Push creative title'
+  description: 'Push creative description'
+  frequency: 1
+  capping: 86400
+  click_frequency: 3
+  click_capping: 86400
+  status: 1

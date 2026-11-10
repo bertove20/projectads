@@ -1,0 +1,27 @@
+summary: Update list of zone rates by campaign
+tags:
+  - campaigns
+description: Update list of zone rates by campaign
+operationId: adv-campaigns-update-zone-rates-by-campaign
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../components/schemas/CampaignZoneRates.yaml'
+responses:
+  '200':
+    $ref: '../../../../components/responses/Success.yaml'
+  '401':
+    $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../common/components/responses/RateLimit.yaml'

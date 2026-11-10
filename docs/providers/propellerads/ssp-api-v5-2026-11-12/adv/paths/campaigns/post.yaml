@@ -1,0 +1,1049 @@
+summary: Create campaign
+tags:
+  - campaigns
+operationId: adv-campaign-create
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../components/schemas/Campaign.yaml'
+      examples:
+        "Onclick CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpa"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            is_adblock_buy: 1
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                amount: 0.5
+              - countries:
+                  - "us"
+                  - "it"
+                amount: 0.9
+        "Onclick CPM":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "cpm"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            is_adblock_buy: 1
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              sub_zone:
+                list:
+                  - 10111
+                  - 40888
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.5
+        "Onclick SmartCPM":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpm"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            is_adblock_buy: 1
+            evenly_limits_usage: false
+            cpa_goal_bid: 0.85
+            cpa_goal_status: true
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              sub_zone:
+                list:
+                  - 10111
+                  - 40888
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.5
+        "Direct click CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpa"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            is_adblock_buy: 1
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              traffic_categories:
+                - premium
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                amount: 0.5
+              - countries:
+                  - "us"
+                  - "it"
+                amount: 0.9
+        "Direct click CPM":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "cpm"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            is_adblock_buy: 1
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              sub_zone:
+                list:
+                  - 10111
+                  - 40888
+                is_excluded: false
+              traffic_categories:
+                - premium
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.8
+        "Direct click SmartCPM":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpm"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              traffic_categories:
+                - premium
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.8
+        "Push notifications CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "cpag"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: true
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                amount: 0.5
+              - countries:
+                  - "us"
+                  - "it"
+                amount: 0.9
+            creatives:
+              - status: 1
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                default_button_disabled: false
+                buttons:
+                  - name: "Custom text"
+              - status: 1
+                is_auto: true
+                language_mode: by_geo
+        "In-Page Push CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "cpag"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: false
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                amount: 0.5
+              - countries:
+                  - "us"
+                  - "it"
+                amount: 0.9
+            creatives:
+              - status: 1
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                skin: "auto"
+              - status: 1
+                is_auto: true
+                language_mode: by_browser
+        "Push notifications CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "cpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            cpa_goal_bid: 0.27
+            cpa_goal_status: true
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: true
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                click_frequency: 3
+                click_capping: 86400
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                default_button_disabled: false
+                buttons:
+                  - name: "Custom text"
+              - status: 1
+                is_auto: true
+                language_mode: custom
+                language: en
+        "Push notifications Smart CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "scpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: true
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                click_frequency: 3
+                click_capping: 86400
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                default_button_disabled: false
+                buttons:
+                  - name: "Custom text"
+              - status: 1
+                is_auto: true
+                language_mode: by_geo
+        "Telegram Ads CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "telegram_ads"
+            rate_model: "cpag"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                is_auto: true
+                language_mode: by_geo
+        "Telegram Ads SmartCPC":
+          value:
+            name: "My campaign created via API"
+            direction: "telegram_ads"
+            rate_model: "scpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                is_auto: true
+                language_mode: by_geo
+                click_capping: 86400
+                click_frequency: 2
+        "Telegram Ads CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "telegram_ads"
+            rate_model: "cpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              traffic_categories:
+                - propeller
+              uvc:
+                list:
+                  - "high_intent"
+                  - "wide_reach"
+                is_excluded: false
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                is_auto: true
+                language_mode: by_geo
+        "In-Page Push CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "cpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            cpa_goal_bid: 0.27
+            cpa_goal_status: true
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              user_activity:
+                list:
+                  - 1
+                  - 2
+                  - 3
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                click_frequency: 3
+                click_capping: 86400
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                skin: "auto"
+              - status: 1
+                is_auto: true
+                language_mode: by_browser
+        "In-Page Push Smart CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "nativeads"
+            rate_model: "scpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone_type:
+                list:
+                  - 42
+                is_excluded: false
+              traffic_categories:
+                - propeller
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.135
+            creatives:
+              - status: 1
+                click_frequency: 3
+                click_capping: 86400
+                title: "Creative one"
+                description: "This is the first creative"
+                icon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQMAAABoEv5EAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAABxJREFUeJztwTEBAAAAwqD1T20ND6AAAAAA4NcAEsAAAdLBrL4AAAAASUVORK5CYII="
+                image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADwAQMAAAAXaWwMAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAACFJREFUeJztwQENAAAAwqD3T20PBxQAAAAAAAAAAAAA/BgrIAAB/BxM7QAAAABJRU5ErkJggg=="
+                skin: "auto"
+              - status: 1
+                is_auto: true
+                language_mode: custom
+                language: fr
+        "Interactive Ads CPA Goal":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpa"
+            target_url: "https://propellerads.com/?clickid=${SUBID}"
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              traffic_categories:
+                - all_survey
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                amount: 0.5
+              - countries:
+                  - "us"
+                  - "it"
+                amount: 0.9
+        "Interactive Ads CPC":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "cpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              traffic_categories:
+                - all_survey
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.005
+        "Interactive Ads SmartCPC":
+          value:
+            name: "My campaign created via API"
+            direction: "onclick"
+            rate_model: "scpc"
+            target_url: "https://propellerads.com/?zoneid=zoneId"
+            frequency: 3
+            capping: 86400
+            status: 1
+            started_at: "01/08/2022"
+            expired_at: "31/12/2022"
+            daily_amount: 50
+            total_amount: 100
+            targeting:
+              country:
+                list:
+                  - "in"
+                  - "us"
+                  - "it"
+                is_excluded: false
+              time_table:
+                list:
+                  - "Mon00"
+                is_excluded: false
+              connection: "mobile"
+              os_type:
+                list:
+                  - "mobile"
+                is_excluded: false
+              os:
+                list:
+                  - "ios"
+                is_excluded: false
+              os_version:
+                list:
+                  - "ios13"
+                is_excluded: false
+              zone:
+                list:
+                  - 1234567
+                  - 4567890
+                is_excluded: false
+              traffic_categories:
+                - all_survey
+            timezone: 3
+            allow_zone_update: true
+            rates:
+              - countries:
+                  - "in"
+                  - "us"
+                  - "it"
+                amount: 0.005
+responses:
+  '201':
+    description: Created campaign info
+    headers:
+      X-Request-Id:
+        $ref: '../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../components/schemas/CampaignFullInfo.yaml'
+  '401':
+    $ref: '../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../common/components/responses/RateLimit.yaml'

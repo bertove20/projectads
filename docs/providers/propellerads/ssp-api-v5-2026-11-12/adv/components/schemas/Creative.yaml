@@ -1,0 +1,15 @@
+type: object
+properties:
+  icon:
+    type: string
+  image:
+    type: string
+  title:
+    type: string
+  description:
+    type: string
+example:
+  icon: 'base64string'
+  image: null
+  title: 'Creative title'
+  description: 'Creative description'

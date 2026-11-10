@@ -1,0 +1,12 @@
+type: object
+properties:
+  topics:
+    type: array
+    maxItems: 1
+    description: "Only one topic can be collected at a time."
+    items:
+      type: integer
+      enum: [ 1, 3 ]
+      description: "1 = clicks; 3 = conversions. 1 is not supported for the Onclick direction."
+  audience_id:
+    type: integer

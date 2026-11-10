@@ -1,0 +1,13 @@
+type: object
+description: Request meta data
+properties:
+  total_items:
+    type: integer
+  total_pages:
+    type: integer
+  page_size:
+    type: integer
+    default: 100
+  page:
+    type: integer
+    default: 1

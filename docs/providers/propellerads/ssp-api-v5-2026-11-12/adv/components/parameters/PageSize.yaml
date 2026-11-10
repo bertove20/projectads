@@ -1,0 +1,6 @@
+in: query
+name: page_size
+schema:
+  type: integer
+description: Result's page size
+required: false

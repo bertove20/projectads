@@ -1,0 +1,17 @@
+description: You exceeded the rate limit
+headers:
+  X-RateLimit-Limit:
+    schema:
+      type: integer
+    description: Request limit per minute.
+  X-RateLimit-Remaining:
+    schema:
+      type: integer
+    description: The number of requests left for the time window.
+  X-RateLimit-Reset:
+    schema:
+      type: string
+      format: date-time
+    description: The UTC date/time at which the current rate limit window resets.
+  X-Request-Id:
+    $ref: '../headers/xRequestId.yaml'

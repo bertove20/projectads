@@ -1,0 +1,23 @@
+get:
+  summary: Getting balance details
+  description: >-
+    The current balance together with the credit limit and whether campaigns can be sent to
+    moderation right now. Campaigns are accepted for moderation only while the balance plus
+    the credit limit is positive; otherwise they can be saved as drafts only.
+  tags:
+    - finance
+  operationId: adv-balance-details
+  responses:
+    '200':
+      description: Balance details
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/BalanceDetails.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

@@ -1,0 +1,16 @@
+summary: Delete zone group
+tags:
+  - zone-groups
+operationId: adv-zone-groups-delete
+parameters:
+  - name: id
+    in: path
+    required: true
+    schema:
+      type: integer
+responses:
+  "200":
+    description: The zone group was successfully deleted
+    headers:
+      X-Request-Id:
+        $ref: '../../../../common/components/headers/xRequestId.yaml'

@@ -1,0 +1,25 @@
+summary: Get full info by campaign
+tags:
+  - campaigns
+operationId: adv-campaign-get
+parameters:
+  - in: path
+    name: campaignId
+    required: true
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+responses:
+  '200':
+    description: Full info by campaign
+    headers:
+      X-Request-Id:
+        $ref: '../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../components/schemas/CampaignFullInfo.yaml'
+  '401':
+    $ref: '../../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../../common/components/responses/RateLimit.yaml'

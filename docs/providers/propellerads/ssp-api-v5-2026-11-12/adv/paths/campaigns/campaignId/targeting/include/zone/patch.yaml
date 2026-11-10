@@ -1,0 +1,34 @@
+summary: Adding the zone to the list of allowed zones
+tags:
+  - campaigns
+description: Adding the zone to the list of allowed zones
+operationId: adv-campaigns-patch-targeting-include-zone
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../../../components/schemas/ZoneTargeting.yaml'
+responses:
+  '200':
+    description: Zone targeting changed
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../../components/schemas/ZoneTargeting.yaml'
+  '401':
+    $ref: '../../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../../common/components/responses/RateLimit.yaml'

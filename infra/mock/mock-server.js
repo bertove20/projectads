@@ -63,6 +63,38 @@ http
       return json(res, 404, { error: { message: 'not mocked' } });
     }
 
+    // ── Meniru Propeller SSP API v5 (docs/providers/propellerads/ssp-api-v5-2026-11-12) ──
+    if (url.pathname.startsWith('/propeller/v5/')) {
+      if (req.headers.authorization !== 'Bearer test-propeller-token') return json(res, 401, { message: 'Unauthorized' });
+      const p = url.pathname.slice('/propeller/v5'.length);
+      received.push({ at: new Date().toISOString(), kind: 'propeller', url: req.url });
+      if (p === '/adv/balance') return json(res, 200, '123.45');
+      if (p === '/adv/campaigns') {
+        return json(res, 200, {
+          result: [
+            { id: 7001, direction_id: 2, name: 'Mock OnClick TH', rate_model: 'scpm', status: 6, is_archived: 0, limit_daily_amount: null, limit_total_amount: null },
+            { id: 7099, direction_id: 61, name: 'Belum dipetakan', rate_model: 'cpag', status: 7, is_archived: 0, limit_daily_amount: 10, limit_total_amount: 100 },
+          ],
+          meta: { total_items: 2, total_pages: 1, page_size: 1000, page: 1 },
+        });
+      }
+      if (p === '/adv/statistics') {
+        statsRequests++;
+        const groups = url.searchParams.getAll('group_by[]');
+        const okDate = (v) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v || '');
+        if (!groups.includes('campaign_id') || !groups.includes('zone_id') || url.searchParams.get('tz') !== '+0000' || !okDate(url.searchParams.get('day_from')) || !okDate(url.searchParams.get('day_to'))) {
+          return json(res, 422, { message: 'bad statistics params', groups, tz: url.searchParams.get('tz') });
+        }
+        const items = [
+          { campaign_id: 7001, zone_id: 880001, impressions: 5000, clicks: 300, conversions: 2, spent: '4.20' },
+          { campaign_id: 7001, zone_id: 880002, impressions: 900, clicks: 20, conversions: 0, spent: '0.80' },
+          { campaign_id: 7099, zone_id: 880003, impressions: 100, clicks: 4, conversions: 0, spent: '0.05' },
+        ];
+        return json(res, 200, [{ items, totals: {}, per_page: 5000, total_pages: 1, total_items: items.length }]);
+      }
+      return json(res, 404, { message: 'not mocked' });
+    }
+
     if (url.pathname.startsWith('/telegram/bot')) {
       const body = await readBody(req);
       const token = url.pathname.split('/')[2].slice(3);

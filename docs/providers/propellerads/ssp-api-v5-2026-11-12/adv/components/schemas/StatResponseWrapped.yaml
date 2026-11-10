@@ -1,0 +1,23 @@
+type: object
+properties:
+  items:
+    type: array
+    items:
+      $ref: './StatResponseRow.yaml'
+  totals:
+    $ref: './StatResponseRow.yaml'
+  per_page:
+    type: number
+    example: 1000
+  total_pages:
+    type: number
+    example: 13
+  total_items:
+    type: number
+    example: 12748
+  vat_percent:
+    type: number
+    example: 0.0
+  user_has_campaigns:
+    type: boolean
+    example: true

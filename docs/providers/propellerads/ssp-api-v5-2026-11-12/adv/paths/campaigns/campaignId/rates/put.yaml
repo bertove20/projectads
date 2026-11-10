@@ -1,0 +1,59 @@
+summary: Setting the list of rates
+tags:
+  - campaigns
+description: Setting the new list of rates. All current rates will be closed. Closed rates won't be deleted, just finished_at value will be updated.
+operationId: adv-campaigns-put-rates
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          rates:
+            $ref: '../../../../components/schemas/Rates.yaml'
+responses:
+  '200':
+    description: Updated list of rates (including finished rates)
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            result:
+              $ref: '../../../../components/schemas/Rate.yaml'
+            meta:
+              $ref: '../../../../../common/components/schemas/Meta.yaml'
+          example:
+            result:
+              - id: 12345
+                countries: [ 'us','ru' ]
+                amount: 200
+                started_at: 1513864800
+                finished_at: 1513868399
+              - id: 12346
+                countries: [ 'it','us' ]
+                amount: 200
+                started_at: 1513864800
+                finished_at: null
+            meta:
+              total_items: 2
+              total_pages: 1
+              page_size: 100
+              page: 1
+  '401':
+    $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../common/components/responses/RateLimit.yaml'

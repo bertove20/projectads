@@ -1,0 +1,7 @@
+type: array
+items:
+  type: integer
+maxItems: 100
+example:
+  - 12342535
+  - 67856712

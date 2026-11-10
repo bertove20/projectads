@@ -1,0 +1,17 @@
+type: array
+items:
+  type: object
+  properties:
+    amount:
+      type: number
+      example: 0.05
+    countries:
+      type: array
+      items:
+        $ref: '../../components/schemas/CountryCode.yaml'
+      example:
+        - "us"
+        - "it"
+  required:
+    - amount
+    - countries

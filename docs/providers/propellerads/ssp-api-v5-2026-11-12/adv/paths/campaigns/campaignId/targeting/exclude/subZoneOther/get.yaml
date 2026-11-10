@@ -1,0 +1,35 @@
+summary: Getting the list of zones with excluded "Other" subzones
+tags:
+  - campaigns
+description: |
+  Returns the current **exclude** state for "Other" subzones. Other subzones are **included by
+  default**; this endpoint only reflects what is excluded (globally via `mode: ALL`, or per zone via
+  `zones`). There is no `include` branch for `sub_zone_other` in the stored targeting.
+
+  - `mode: ALL`: global exclusion (subzone ID `0` in `exclude.request_var_id`).
+  - `mode: TARGET_ZONES`: per-zone exclusions (`exclude.zero_request_var_id_zone`).
+  - `zones`: zone IDs affected in `TARGET_ZONES` mode.
+operationId: adv-campaigns-get-targeting-sub-zone-other
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+responses:
+  '200':
+    description: Sub zone other exclude state (see operation description)
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../../components/schemas/SubZoneOtherTargetingResponse.yaml'
+  '401':
+    $ref: '../../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../../common/components/responses/RateLimit.yaml'

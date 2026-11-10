@@ -1,0 +1,21 @@
+get:
+  summary: Get available devices (targeting)
+  tags:
+    - collections
+  description: Get available devices (targeting)
+  operationId: collections-targeting-device
+
+  responses:
+    '200':
+      description: Returned JSON array with available devices
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/CollectionResult.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

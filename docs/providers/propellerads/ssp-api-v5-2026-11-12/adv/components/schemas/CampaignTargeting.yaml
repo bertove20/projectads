@@ -1,0 +1,159 @@
+type: object
+properties:
+  country:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          $ref: '../../components/schemas/CountryCode.yaml'
+      is_excluded:
+        type: boolean
+  time_table:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: string
+          description: "Day of a week and an hour for scheduling"
+          example: "Mon00; Tue03; Wed07; Thu10; Fri14; Sun18; Sat24"
+      is_excluded:
+        type: boolean
+  connection:
+    type: string
+    enum:
+      - "mobile"
+      - "other"
+  os_type:
+    type: object
+    description: "Required whenever `os` is set."
+    properties:
+      list:
+        type: array
+        items:
+          type: string
+          description: "One of value from OS Type collection"
+      is_excluded:
+        type: boolean
+  os:
+    type: object
+    description: "Requires `os_type`; every OS must belong to one of the listed `os_type` values."
+    properties:
+      list:
+        type: array
+        items:
+          type: string
+          description: "One of value from OS collection"
+      is_excluded:
+        type: boolean
+  os_version:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: string
+          description: "One of value from OS version collection"
+      is_excluded:
+        type: boolean
+  user_activity:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: integer
+          enum: [ 1, 2, 3 ]
+          description: "1 = High; 2 = Medium; 3 = Low. One of value from user activity collection. Supported for Onclick CPM and Push CPM/CPC"
+      is_excluded:
+        type: boolean
+  uvc:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: string
+          enum:
+            - "high_intent"
+            - "wide_reach"
+          description: "One of value from UVC collection. Supported for Telegram Ads CPC only."
+      is_excluded:
+        type: boolean
+  zone:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: integer
+      is_excluded:
+        type: boolean
+  sub_zone:
+    type: object
+    properties:
+      list:
+        type: array
+        description: |
+          List of sub-zone IDs. Value `0` means all "Other" subzones globally and is valid only
+          together with `is_excluded: true`.
+        items:
+          type: integer
+      is_excluded:
+        type: boolean
+  sub_zone_other:
+    type: object
+    description: |
+      **Exclude-only** targeting for "Other" subzones. By default Other subzones are **included**
+      (no row); this block describes **exclusions** only—there is no `include` branch for
+      `sub_zone_other` in stored targeting.
+
+      Use `type=ALL` to exclude all Other subzones globally (adds `0` to the sub_zone exclude list),
+      or `type=TARGET_ZONES` with specific zone IDs (stored as `zero_request_var_id_zone` under `exclude`).
+    properties:
+      type:
+        type: string
+        enum:
+          - "ALL"
+          - "TARGET_ZONES"
+      list:
+        type: array
+        description: Zone IDs for which "Other" subzones are excluded (per-zone mode).
+        items:
+          type: integer
+      is_excluded:
+        type: boolean
+        description: |
+          When `true`, `list` applies as **exclude** targeting (only meaningful mode for Other;
+          default state is no exclusion).
+  zone_type:
+    type: object
+    properties:
+      list:
+        type: array
+        items:
+          type: integer
+          enum: [ 42, 78, 119 ]
+          description: "42, 78, 119 = In-Page Push, used together. Supported for Push campaigns only."
+      is_excluded:
+        type: boolean
+  traffic_categories:
+    type: array
+    items:
+      type: string
+      enum:
+        - "propeller"
+        - "broker"
+        - "premium"
+        - "social_traffic"
+        - "all_survey"
+    description: >-
+      Completely unsupported for Push CPA Goal.
+      Broker is supported for Onclick CPM/SmartCPM/CPA Goal and Push CPM/CPC/SmartCPC.
+      Premium is supported for Onclick Direct only.
+      Social traffic is supported for Onclick.
+      Use "all_survey" to create an Interactive Ads campaign (Onclick only).
+required:
+  - country
+  - time_table

@@ -1,0 +1,73 @@
+post:
+  summary: Duplicate campaign
+  tags:
+    - campaigns
+  description: >-
+    Creates a copy of the campaign with its settings, targeting, rates and creatives.
+    The copy is named "Copy of &lt;campaign name&gt;" and is saved as a draft: start it separately when it is ready.
+    The creatives of the copy go through moderation again.
+    Only campaigns you created yourself can be duplicated; campaigns created by your account manager cannot.
+    An archived campaign can be duplicated too: the copy is not archived.
+    The request body is optional.
+  operationId: adv-campaigns-clone
+  parameters:
+    - in: path
+      name: campaignId
+      description: Numeric ID of the campaign to duplicate
+      schema:
+        type: integer
+      required: true
+  requestBody:
+    required: false
+    content:
+      application/json:
+        schema:
+          type: object
+          additionalProperties: false
+          properties:
+            duplicate_optimization_rules:
+              type: boolean
+              default: false
+              description: Copy the optimization rules of the campaign to the copy as well.
+            partner_source:
+              type: string
+              enum:
+                - interstitial_from_onclick
+                - multicampaign
+                - push_ipp
+                - onclick_from_telegram
+                - ai_bot
+              description: >-
+                The source the copy is attributed to in statistics, as on campaign create.
+                The copy does not inherit the source of the original: without this field it has none.
+          example:
+            duplicate_optimization_rules: true
+            partner_source: ai_bot
+  responses:
+    '200':
+      description: The copy of the campaign. Its `id` is the ID of the new campaign.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../../components/schemas/CampaignFullInfo.yaml'
+    '400':
+      $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+    '401':
+      $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+    '403':
+      description: >-
+        The campaign cannot be duplicated: it was created by your account manager (the response has a `hint`),
+        or duplicating campaigns is not available for your account.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../common/components/headers/xRequestId.yaml'
+    '404':
+      description: Campaign not found.
+      headers:
+        X-Request-Id:
+          $ref: '../../../../../common/components/headers/xRequestId.yaml'
+    '429':
+      $ref: '../../../../../common/components/responses/RateLimit.yaml'

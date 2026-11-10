@@ -1,0 +1,250 @@
+openapi: '3.0.0'
+info:
+  title: Propeller SSP API
+  version: '5.0'
+  description: >-
+    Propeller SSP API. Authorization by bearer token from login method.
+    <h5>Swagger is a testing tool which can give you insights about parameters, data pulling samples, etc.<br>
+    In order to set up the regular pulling of data, please consult your technical team for the set up of stable automated process.</h5>
+    <h3>How to use swagger authorization</h3>
+    <img src="adv_api_token.png" width="700" />
+    <ol style="font-size: 14px">
+      <li>
+        Get the SSP API token on the “Profile” page in your SSP account.
+      </li>
+      <li>At the top of the page, find the “Authorize” button and push it.</li>
+      <li>
+        When the pop-up form appears paste the token value in the “Value” field. Click on the “Authorize” button.
+      </li>
+    </ol>
+    <img src="auth_popup.png" width="700" />
+  contact:
+    name: Support
+    url: https://propellerads.com/contact-us/
+    email: contact.us@propellerads.com
+servers:
+  - url: https://ssp-api.propellerads.com/v5
+tags:
+  - name: campaigns
+    description: Campaigns
+  - name: zone-groups
+    description: Zone Groups
+  - name: creatives
+    description: Creatives
+  - name: finance
+    description: Finance
+  - name: statistics
+    description: Statistics
+  - name: collections
+    description: Collections
+  - name: inventory-planner
+    description: Recommended rates and traffic volume estimation
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: "../common/components/securitySchemes/bearerAuth.yaml"
+
+  schemas:
+    Balance:
+      $ref: "components/schemas/Balance.yaml"
+    Campaign:
+      $ref: "components/schemas/Campaign.yaml"
+    CampaignAudience:
+      $ref: "components/schemas/CampaignAudience.yaml"
+    CampaignCreative:
+      $ref: "components/schemas/CampaignCreative.yaml"
+    CampaignFullInfo:
+      $ref: "components/schemas/CampaignFullInfo.yaml"
+    CampaignIds:
+      $ref: "components/schemas/CampaignIds.yaml"
+    CampaignStatus:
+      $ref: "components/schemas/CampaignStatus.yaml"
+    CampaignTargeting:
+      $ref: "components/schemas/CampaignTargeting.yaml"
+    CampaignZoneRate:
+      $ref: "components/schemas/CampaignZoneRate.yaml"
+    CampaignZoneRates:
+      $ref: "components/schemas/CampaignZoneRates.yaml"
+    Capping:
+      $ref: "components/schemas/Capping.yaml"
+    CollectionArrayResult:
+      $ref: "components/schemas/CollectionArrayResult.yaml"
+    CollectionResult:
+      $ref: "components/schemas/CollectionResult.yaml"
+    CountryCode:
+      $ref: "components/schemas/CountryCode.yaml"
+    Creative:
+      $ref: "components/schemas/Creative.yaml"
+    CreativeFullInfo:
+      $ref: "components/schemas/CreativeFullInfo.yaml"
+    Direction:
+      $ref: "components/schemas/Direction.yaml"
+    Errors:
+      $ref: "../common/components/schemas/Errors.yaml"
+    Format:
+      $ref: "components/schemas/Format.yaml"
+    Frequency:
+      $ref: "components/schemas/Frequency.yaml"
+    InventoryPlannerRequest:
+      $ref: "components/schemas/InventoryPlannerRequest.yaml"
+    InventoryPlannerResponse:
+      $ref: "components/schemas/InventoryPlannerResponse.yaml"
+    Meta:
+      $ref: "../common/components/schemas/Meta.yaml"
+    PageNumber:
+      $ref: "components/schemas/PageNumber.yaml"
+    PageSize:
+      $ref: "components/schemas/PageSize.yaml"
+    Rate:
+      $ref: "components/schemas/Rate.yaml"
+    RateModel:
+      $ref: "components/schemas/RateModel.yaml"
+    Rates:
+      $ref: "components/schemas/Rates.yaml"
+    Statistics:
+      $ref: "components/schemas/Statistics.yaml"
+    StatisticsFilter:
+      $ref: "components/schemas/StatisticsFilter.yaml"
+    Success:
+      $ref: "components/schemas/Success.yaml"
+    TargetingGetModel:
+      $ref: "components/schemas/TargetingGetModel.yaml"
+    TargetingPutModel:
+      $ref: "components/schemas/TargetingPutModel.yaml"
+    TargetingPatchModel:
+      $ref: "components/schemas/TargetingPatchModel.yaml"
+    Timezone:
+      $ref: "../common/components/schemas/Timezone.yaml"
+    TrafficType:
+      $ref: "components/schemas/TrafficType.yaml"
+    Url:
+      $ref: "components/schemas/Url.yaml"
+    SubZoneOtherTargeting:
+      $ref: "components/schemas/SubZoneOtherTargeting.yaml"
+    SubZoneOtherTargetingResponse:
+      $ref: "components/schemas/SubZoneOtherTargetingResponse.yaml"
+    ZoneTargeting:
+      $ref: "components/schemas/ZoneTargeting.yaml"
+
+  headers:
+    xRequestId:
+      $ref: "../common/components/headers/xRequestId.yaml"
+
+  responses:
+    BadRequest:
+      $ref: "components/responses/BadRequest.yaml"
+    RateLimit:
+      $ref: "../common/components/responses/RateLimit.yaml"
+    Success:
+      $ref: "components/responses/Success.yaml"
+    Unauthorized:
+      $ref: "../common/components/responses/Unauthorized.yaml"
+    ValidationErrors:
+      $ref: "../common/components/responses/ValidationErrors.yaml"
+
+  parameters:
+    PageNumber:
+      $ref: "components/parameters/PageNumber.yaml"
+    PageSize:
+      $ref: "components/parameters/PageSize.yaml"
+
+security:
+  - bearerAuth: [ ]
+
+paths:
+  /adv/campaigns:
+    $ref: "paths/campaigns/index.yaml"
+  /adv/campaigns/{campaignId}:
+    $ref: "paths/campaigns/campaignId/index.yaml"
+  /adv/campaigns/{campaignId}/rates/:
+    $ref: "paths/campaigns/campaignId/rates/index.yaml"
+  /adv/campaigns/rates/:
+    $ref: "paths/campaigns/rates/index.yaml"
+  /adv/campaigns/{campaignId}/zone_rates:
+    $ref: "paths/campaigns/campaignId/zone_rates/index.yaml"
+  /adv/campaigns/{campaignId}/zone_rates/{zoneId}:
+    $ref: "paths/campaigns/campaignId/zone_rates/zoneId/index.yaml"
+  /adv/campaigns/{campaignId}/url/:
+    $ref: "paths/campaigns/campaignId/url/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/{type}/:
+    $ref: "paths/campaigns/campaignId/targeting/type/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/include/zone:
+    $ref: "paths/campaigns/campaignId/targeting/include/zone/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/exclude/zone:
+    $ref: "paths/campaigns/campaignId/targeting/exclude/zone/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/include/sub_zone:
+    $ref: "paths/campaigns/campaignId/targeting/include/subZone/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/exclude/sub_zone:
+    $ref: "paths/campaigns/campaignId/targeting/exclude/subZone/index.yaml"
+  /adv/campaigns/{campaignId}/targeting/sub_zone_other:
+    $ref: "paths/campaigns/campaignId/targeting/exclude/subZoneOther/index.yaml"
+  /adv/campaigns/{campaignId}/clone:
+    $ref: "paths/campaigns/campaignId/clone/index.yaml"
+  /adv/campaigns/{campaignId}/creatives:
+    $ref: "paths/campaigns/campaignId/creatives/index.yaml"
+  /adv/campaigns/{campaignId}/creatives/existing:
+    $ref: "paths/campaigns/campaignId/creatives/existing/index.yaml"
+  /adv/campaigns/archive:
+    $ref: "paths/campaigns/archive/index.yaml"
+  /adv/campaigns/play:
+    $ref: "paths/campaigns/play/index.yaml"
+  /adv/campaigns/stop:
+    $ref: "paths/campaigns/stop/index.yaml"
+  /adv/zone-groups/:
+    $ref: "paths/zoneGroups/index.yaml"
+  /adv/zone-groups/{id}:
+    $ref: "paths/zoneGroups/byId/index.yaml"
+  /adv/creatives/{creativeId}:
+    $ref: "paths/creatives/creativeId/index.yaml"
+  /adv/creatives/start:
+    $ref: "paths/creatives/start/index.yaml"
+  /adv/creatives/stop:
+    $ref: "paths/creatives/stop/index.yaml"
+  /adv/balance:
+    $ref: "paths/balance/index.yaml"
+  /adv/balance/details:
+    $ref: "paths/balance/details/index.yaml"
+  /adv/statistics:
+    $ref: "paths/statistics/index.yaml"
+  /collections:
+    $ref: "paths/collections/index.yaml"
+  /collections/{type}:
+    $ref: "paths/collections/type/index.yaml"
+  /collections/countries:
+    $ref: "paths/collections/countries.yaml"
+  /collections/targeting/region:
+    $ref: "paths/collections/targeting/region.yaml"
+  /collections/targeting/city:
+    $ref: "paths/collections/targeting/city.yaml"
+  /collections/targeting/time_table:
+    $ref: "paths/collections/targeting/time_table.yaml"
+  /collections/targeting/os_version:
+    $ref: "paths/collections/targeting/os_version.yaml"
+  /collections/targeting/os_type:
+    $ref: "paths/collections/targeting/os_type.yaml"
+  /collections/targeting/os:
+    $ref: "paths/collections/targeting/os.yaml"
+  /collections/targeting/device_type:
+    $ref: "paths/collections/targeting/device_type.yaml"
+  /collections/targeting/device:
+    $ref: "paths/collections/targeting/device.yaml"
+  /collections/targeting/browser:
+    $ref: "paths/collections/targeting/browser.yaml"
+  /collections/targeting/zone:
+    $ref: "paths/collections/targeting/zone.yaml"
+  /collections/targeting/connection:
+    $ref: "paths/collections/targeting/connection.yaml"
+  /collections/targeting/mobile_isp:
+    $ref: "paths/collections/targeting/mobile_isp.yaml"
+  /collections/targeting/proxy:
+    $ref: "paths/collections/targeting/proxy.yaml"
+  /collections/targeting/language:
+    $ref: "paths/collections/targeting/language.yaml"
+  /collections/targeting/audience:
+    $ref: "paths/collections/targeting/audience.yaml"
+  /collections/targeting/traffic_categories:
+    $ref: "paths/collections/targeting/traffic_categories.yaml"
+  /collections/targeting/uvc:
+    $ref: "paths/collections/targeting/uvc.yaml"
+  /inventory-planner/:
+    $ref: "paths/inventoryPlanner/index.yaml"

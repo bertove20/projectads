@@ -61,7 +61,8 @@ Spesifikasi lengkap: [read.md](read.md). Roadmap: read.md bagian 17.6. Riwayat p
 | JS SDK (event OBSERVED, batching, offline, consent, sendBeacon, click-out) | ✅ diuji di Chromium |
 | Collector event: allowlist domain, CORS, rate limit, dedupe, pembuangan PII | ✅ |
 | Funnel campaign | ✅ |
-| Adapter Clickadu / PropellerAds / EvaDav | ⏳ menunggu verifikasi dokumentasi API resmi |
+| Adapter PropellerAds (Propeller SSP API v5): token, daftar campaign, statistik & spend per zone (UTC) | ✅ diuji dengan mock dari spesifikasi resmi |
+| Adapter Clickadu / EvaDav | ⏳ menunggu dokumentasi API resmi dari account manager |
 
 Uji SDK di browser: `npx playwright install chromium` (sekali), lalu `ADMIN_MFA_SECRET=… node apps/api/test/sdk.browser.mjs` (butuh stack lokal + `npm run dev:dashboard`).
 

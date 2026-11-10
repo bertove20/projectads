@@ -1,0 +1,39 @@
+summary: Adding zones to the excluded "Other" subzones list
+tags:
+  - campaigns
+description: |
+  Appends zone IDs to the **per-zone exclude** list for "Other" subzones. Only **exclude**
+  targeting is affected; there is no `include` payload for this resource.
+
+  When new zones are added, global "All" (subzone ID `0` in `exclude.request_var_id`) is removed
+  if present, so per-zone and global modes do not coexist.
+operationId: adv-campaigns-patch-targeting-sub-zone-other
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../../../components/schemas/SubZoneOtherTargeting.yaml'
+responses:
+  '200':
+    description: Updated exclude state for Other subzones
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../../../../components/schemas/SubZoneOtherTargetingResponse.yaml'
+  '401':
+    $ref: '../../../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../../../common/components/responses/RateLimit.yaml'

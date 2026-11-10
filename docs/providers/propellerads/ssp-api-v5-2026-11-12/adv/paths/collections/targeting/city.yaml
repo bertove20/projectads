@@ -1,0 +1,27 @@
+get:
+  summary: Get available cities (targeting)
+  tags:
+    - collections
+  description: Get available cities (targeting)
+  operationId: collections-targeting-cities
+  parameters:
+    - in: query
+      name: regionId
+      schema:
+        type: integer
+      description: Region ID
+      required: true
+  responses:
+    '200':
+      description: Returned JSON array with available cities
+      headers:
+        X-Request-Id:
+          $ref: '../../../../common/components/headers/xRequestId.yaml'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../components/schemas/CollectionResult.yaml'
+    '401':
+      $ref: '../../../../common/components/responses/Unauthorized.yaml'
+    '429':
+      $ref: '../../../../common/components/responses/RateLimit.yaml'

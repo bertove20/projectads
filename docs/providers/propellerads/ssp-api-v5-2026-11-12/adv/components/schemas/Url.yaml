@@ -1,0 +1,5 @@
+type: object
+properties:
+  url:
+    type: string
+    example: "https://propellerads.com"

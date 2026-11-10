@@ -1,0 +1,44 @@
+summary: Update campaign
+tags:
+  - campaigns
+operationId: adv-campaigns-update
+parameters:
+  - in: path
+    name: campaignId
+    required: true
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          name:
+            type: string
+            maxLength: 255
+            example: "Some campaign name"
+          frequency:
+            type: integer
+          capping:
+            type: integer
+          limit_total_amount:
+            type: number
+          limit_daily_amount:
+            type: number
+responses:
+  '200':
+    description: Update campaign fields
+    headers:
+      X-Request-Id:
+        $ref: '../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          $ref: '../../../components/schemas/CampaignFullInfo.yaml'
+  '401':
+    $ref: '../../../../common/components/responses/Unauthorized.yaml'
+  '429':
+    $ref: '../../../../common/components/responses/RateLimit.yaml'

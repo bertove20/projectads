@@ -1,0 +1,4 @@
+patch:
+  $ref: "patch.yaml"
+get:
+  $ref: "get.yaml"

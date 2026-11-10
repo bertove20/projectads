@@ -1,0 +1,57 @@
+type: object
+properties:
+  id:
+    type: integer
+  direction_id:
+    type: integer
+  name:
+    type: string
+  rate_model:
+    type: string
+  status:
+    type: integer
+  is_archived:
+    type: integer
+  frequency:
+    type: integer
+  capping:
+    type: integer
+  target_url:
+    type: string
+  started_at:
+    type: string
+    description: "in YYYY-MM-dd format."
+  limit_total_amount:
+    type: number
+  limit_daily_amount:
+    type: number
+  allow_zone_update:
+    type: boolean
+  creatives:
+    type: array
+    items:
+      $ref: '../../components/schemas/CreativeFullInfo.yaml'
+example:
+  id: 1
+  direction_id: 2
+  name: Example campaign 1
+  rate_model: cpa
+  status: 6
+  is_archived: 0
+  frequency: 5
+  capping: 24
+  target_url: "https://propellerads.com"
+  started_at: "2021-04-01"
+  limit_total_amount: 1000
+  limit_daily_amount: 100
+  allow_zone_update: true
+  creatives:
+    - id: 1
+      user_status: 1
+      policy_status: 1
+      icon: 'base64string'
+      image: null
+      title: 'Creative title'
+      description: 'Creative description'
+      frequency: 1
+      capping: 24

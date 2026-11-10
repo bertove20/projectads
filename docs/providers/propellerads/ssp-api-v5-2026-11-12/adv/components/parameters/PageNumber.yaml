@@ -1,0 +1,6 @@
+in: query
+name: page
+schema:
+  type: integer
+description: Result's page number
+required: false

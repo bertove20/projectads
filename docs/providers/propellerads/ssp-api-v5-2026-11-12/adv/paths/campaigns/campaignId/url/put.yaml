@@ -1,0 +1,27 @@
+summary: Setting the url for campaign
+tags:
+  - campaigns
+description: "Setting the new url for campaign. This method updates url for all campaign's materials. Please note: after calling this method, your campaign will go through moderation and will be launched after it has passed"
+operationId: adv-campaigns-put-url
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: '../../../../components/schemas/Url.yaml'
+responses:
+  '200':
+    $ref: '../../../../components/responses/Success.yaml'
+  '401':
+    $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../common/components/responses/RateLimit.yaml'

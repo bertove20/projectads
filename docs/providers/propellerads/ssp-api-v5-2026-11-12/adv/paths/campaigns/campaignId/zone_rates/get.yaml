@@ -1,0 +1,75 @@
+summary: Getting the list of zone rates by campaign
+tags:
+  - campaigns
+description: Getting the list of zone rates by campaign (including finished rates)
+operationId: adv-campaigns-get-zone-rates-by-campaign
+parameters:
+  - in: path
+    name: campaignId
+    description: Numeric ID of the campaign
+    schema:
+      type: integer
+    required: true
+  - in: query
+    name: only_active
+    description: >
+      Filter zone rates by active:
+       * `0` - All rates
+       * `1` - Only active rates
+    schema:
+      type: integer
+      enum: [ 0, 1 ]
+      default: 1
+    required: false
+  - in: query
+    name: page
+    schema:
+      type: integer
+    description: Result's page number
+    required: false
+  - in: query
+    name: page_size
+    schema:
+      type: integer
+    description: Result's page size
+    required: false
+responses:
+  '200':
+    description: List of zone rates by campaign
+    headers:
+      X-Request-Id:
+        $ref: '../../../../../common/components/headers/xRequestId.yaml'
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            result:
+              type: array
+              items:
+                $ref: '../../../../components/schemas/CampaignZoneRate.yaml'
+            meta:
+              $ref: '../../../../../common/components/schemas/Meta.yaml'
+          example:
+            result:
+              - id: 12345
+                countries: [ 'us','ru' ]
+                amount: 200
+                started_at: 1513864800
+                finished_at: 1513868399
+              - id: 12346
+                countries: [ 'it','us' ]
+                amount: 200
+                started_at: 1513864800
+                finished_at: null
+            meta:
+              total_items: 2
+              total_pages: 1
+              page_size: 100
+              page: 1
+  '401':
+    $ref: '../../../../../common/components/responses/Unauthorized.yaml'
+  '400':
+    $ref: '../../../../../common/components/responses/ValidationErrors.yaml'
+  '429':
+    $ref: '../../../../../common/components/responses/RateLimit.yaml'

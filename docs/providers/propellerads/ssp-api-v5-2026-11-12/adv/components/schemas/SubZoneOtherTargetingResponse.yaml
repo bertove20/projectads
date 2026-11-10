@@ -1,0 +1,24 @@
+type: object
+description: |
+  Current **exclude** state for "Other" subzones. Global "All" mode and per-zone list
+  (`zones`) are mutually exclusive representations; both reflect **exclusion** only—by default
+  Other subzones are not excluded anywhere.
+properties:
+  mode:
+    type: string
+    enum: [ ALL, TARGET_ZONES ]
+    description: |
+      Current exclusion mode. `ALL` means "Other" subzones are excluded **globally** for all zones
+      (subzone ID `0` in `exclude.request_var_id`). `TARGET_ZONES` means exclusion is applied
+      only to specific zones listed in `zones`.
+  zones:
+    type: array
+    description: |
+      Zone IDs for which "Other" subzones are **excluded individually** (per-zone mode). Empty
+      when only global exclusions apply or when no exclusions are configured.
+    items:
+      type: integer
+      uniqueItems: true
+example:
+  mode: TARGET_ZONES
+  zones: [ 1, 2 ]

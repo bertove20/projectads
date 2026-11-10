@@ -1,0 +1,16 @@
+type: object
+description: |
+  Exclude targeting by subzone. Value `0` excludes all "Other" subzones
+required:
+  - sub_zones
+properties:
+  sub_zones:
+    type: array
+    uniqueItems: true
+    description: |
+      List of forbidden subzone IDs. `0` forbids all "Other" subzones.
+    items:
+      type: integer
+      minimum: 0
+example:
+  sub_zones: [ 123, 456 ]

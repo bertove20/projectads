@@ -1,0 +1,5 @@
+post:
+  $ref: "post.yaml"
+get:
+  $ref: "get.yaml"
+

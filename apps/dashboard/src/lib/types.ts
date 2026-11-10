@@ -251,11 +251,9 @@ export interface SyncRun {
 }
 
 export interface RemoteCampaign {
-  campaign_id: number;
-  campaign_title: string;
-  campaign_status: string;
-  format_id: number | null;
-  bid_model_id: number;
+  id: string;
+  title: string;
+  status: string;
   mappedTo: { id: string; name: string } | null;
 }
 
