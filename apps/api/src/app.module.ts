@@ -20,6 +20,7 @@ import { IntegrationController } from './networks/integration.controller';
 import { NetworkSyncService } from './networks/network-sync.service';
 import { OrganizationsController } from './organizations/organizations.controller';
 import { AnalyticsService } from './reports/analytics.service';
+import { EventsController } from './reports/events.controller';
 import { NetworkReportsController } from './reports/network-reports.controller';
 import { ReportsController } from './reports/reports.controller';
 
@@ -43,6 +44,7 @@ import { ReportsController } from './reports/reports.controller';
     IntegrationController,
     NetworkReportsController,
     AlertsController,
+    EventsController,
   ],
   providers: [
     SessionService,

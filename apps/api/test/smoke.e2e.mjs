@@ -397,6 +397,54 @@ async function main() {
   const cleared = await admin.put(`/campaigns/${camp.body.id}/routes`, { routes: [] });
   check('routing dapat dikosongkan (kembali ke tujuan default)', cleared.status === 200 && cleared.body.length === 0, cleared);
 
+  console.log('\n[18] Phase 3 — JS SDK & funnel');
+  const siteDomain = `sdk-${RUN}.example.com`;
+  const site = await admin.post('/websites', { name: `Site ${RUN}`, domain: siteDomain });
+  const keyRes = await admin.post(`/websites/${site.body.id}/sdk-key`);
+  const sdkKey = keyRes.body?.sdkKey;
+  check('SDK key & snippet dibuat', keyRes.status === 200 && /^[A-Za-z0-9_-]{16,}$/.test(sdkKey ?? '') && keyRes.body.sdkSnippet?.includes(`sdk.js?k=${sdkKey}`), keyRes.body);
+  const sdkJs = await fetch(`${TRK}/sdk.js?k=${sdkKey}`);
+  const sdkText = await sdkJs.text();
+  check('GET /sdk.js disajikan sebagai JavaScript', sdkJs.status === 200 && sdkJs.headers.get('content-type')?.includes('javascript') && sdkText.includes(sdkKey), sdkJs.status);
+  check('GET /sdk.js dengan key tak dikenal → 404', (await fetch(`${TRK}/sdk.js?k=tidakadakeyini12345`)).status === 404);
+
+  const sendEvents = (origin, events, contentType = 'text/plain') =>
+    fetch(`${TRK}/e`, { method: 'POST', headers: { 'content-type': contentType, ...(origin ? { origin } : {}) }, body: JSON.stringify({ k: sdkKey, events }) });
+  const ev = (t, extra = {}) => ({ id: crypto.randomUUID(), t, ts: Date.now(), p: '/promo?email=a@b.com', sid: crypto.randomUUID(), cid: clickId, ...extra });
+
+  const evil = await sendEvents('http://evil.example.net', [ev('page_view')]);
+  check('event dari domain lain ditolak (403)', evil.status === 403, evil.status);
+  const noOrigin = await sendEvents(null, [ev('page_view')]);
+  check('event tanpa Origin/Referer ditolak (403)', noOrigin.status === 403, noOrigin.status);
+  const dupId = crypto.randomUUID();
+  const batch = [
+    ev('page_view', { id: dupId }),
+    ev('landing_view'),
+    ev('registration_started', { props: { plan: 'gold', email: 'a@b.com', phone: '0812345678' } }),
+    ev('registration_success_verified'),
+    ev('hack_event'),
+  ];
+  const okRes = await sendEvents(`http://www.${siteDomain}`, batch);
+  const okBody = await okRes.json();
+  check('event dari subdomain terdaftar diterima (text/plain)', okRes.status === 200 && okBody.accepted === 3, okBody);
+  check('event "verified" dari browser ditolak', okBody.rejected?.some((r) => r.reason === 'verified_events_must_come_from_backend'), okBody.rejected);
+  check('jenis event tak dikenal ditolak', okBody.rejected?.some((r) => r.reason === 'unknown_type'), okBody.rejected);
+  check('CORS hanya untuk origin terdaftar', okRes.headers.get('access-control-allow-origin') === `http://www.${siteDomain}` && !evil.headers.get('access-control-allow-origin'));
+  const dupRes = await (await sendEvents(`http://${siteDomain}`, [ev('page_view', { id: dupId })])).json();
+  check('event dengan ID sama tidak disimpan dua kali', dupRes.accepted === 0 && dupRes.duplicates === 1, dupRes);
+  const evList = await admin.get(`/events?websiteId=${site.body.id}`);
+  const regEvent = evList.body?.find((e) => e.type === 'REGISTRATION_STARTED');
+  check('event tersimpan & terhubung ke campaign lewat click ID', evList.status === 200 && regEvent?.campaignId === camp.body.id, regEvent);
+  check('PII dibuang dari properti & query string dari path', regEvent?.props?.plan === 'gold' && !('email' in (regEvent?.props ?? {})) && !('phone' in (regEvent?.props ?? {})) && regEvent?.path === '/promo', regEvent);
+  const fn = await admin.get(`/analytics/funnel?campaignId=${camp.body.id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  const stage = (k) => fn.body?.stages?.find((s) => s.key === k);
+  check('funnel: klik → landing → mulai registrasi', fn.status === 200 && stage('click')?.count >= 1 && stage('landing_view')?.count === 1 && stage('registration_started')?.count === 1 && fn.body.sdkActive === true, fn.body?.stages);
+  check('funnel: konversi VERIFIED terpisah dari event OBSERVED', stage('conversion_verified')?.source === 'postback_verified' && stage('registration_started')?.source === 'sdk_observed', fn.body?.stages);
+  const consent = await admin.patch(`/websites/${site.body.id}`, { requireConsent: true, extraDomains: ['partner-site.com'] });
+  check('pengaturan consent & domain tambahan disimpan', consent.status === 200 && consent.body.requireConsent === true && consent.body.extraDomains.includes('partner-site.com'), consent.body);
+  const bFunnel = await buyer.get(`/analytics/funnel?campaignId=${camp2.body.id}`);
+  check('Media Buyer tidak bisa melihat funnel campaign di luar cakupannya', bFunnel.status === 403, bFunnel.status);
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;

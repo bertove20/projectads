@@ -1,7 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ActiveStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUUID, Length, Matches, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID, Length, Matches, MaxLength } from 'class-validator';
+import { Website } from '@prisma/client';
+import { randomBytes } from 'crypto';
+import { ENV, Env } from '../config/env';
 import { AuditService } from '../common/audit/audit.service';
 import { AuthUser, CurrentUser, Org, OrgContext, RequirePermissions } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -17,6 +20,10 @@ class WebsiteDto {
 class UpdateWebsiteDto {
   @IsOptional() @IsString() @Length(2, 100) name?: string;
   @IsOptional() @IsEnum(ActiveStatus) status?: ActiveStatus;
+  /** Wajibkan consent sebelum SDK mengirim event */
+  @IsOptional() @IsBoolean() requireConsent?: boolean;
+  /** Domain tambahan yang boleh mengirim event JS SDK */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @Matches(DOMAIN_RE, { each: true, message: 'Domain tambahan tidak valid' }) extraDomains?: string[];
 }
 class LandingDto {
   @IsString() @Length(2, 100) name: string;
@@ -35,12 +42,41 @@ export class WebsitesController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /** Website + potongan kode pemasangan JS SDK (sdkKey bersifat publik, bukan rahasia). */
+  private withSdk(w: Website) {
+    const base = this.env.TRACKER_PUBLIC_URL.replace(/\/$/, '');
+    return {
+      ...w,
+      sdkSnippet: w.sdkKey
+        ? [
+            '<script>window.eaip=window.eaip||function(){(window.eaipq=window.eaipq||[]).push(arguments)}</script>',
+            `<script async src="${base}/sdk.js?k=${w.sdkKey}"></script>`,
+          ].join('\n')
+        : null,
+    };
+  }
 
   @Get('websites')
   @RequirePermissions('websites.read')
-  list(@Org() org: OrgContext) {
-    return this.prisma.website.findMany({ where: { organizationId: org.organizationId }, orderBy: { createdAt: 'desc' } });
+  async list(@Org() org: OrgContext) {
+    const rows = await this.prisma.website.findMany({ where: { organizationId: org.organizationId }, orderBy: { createdAt: 'desc' } });
+    return rows.map((w) => this.withSdk(w));
+  }
+
+  /** Buat atau rotasi kunci JS SDK. Kunci lama langsung berhenti berlaku. */
+  @Post('websites/:id/sdk-key')
+  @RequirePermissions('websites.manage')
+  @HttpCode(200)
+  async rotateSdkKey(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    assertFullScope(org);
+    const w = await this.prisma.website.findFirst({ where: { id, organizationId: org.organizationId } });
+    if (!w) notFound('Website');
+    const after = await this.prisma.website.update({ where: { id }, data: { sdkKey: randomBytes(18).toString('base64url') } });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: w.sdkKey ? 'website.sdk_key_rotate' : 'website.sdk_key_create', entityType: 'website', entityId: id });
+    return this.withSdk(after);
   }
 
   @Post('websites')
@@ -58,9 +94,12 @@ export class WebsitesController {
     assertFullScope(org);
     const before = await this.prisma.website.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!before) notFound('Website');
-    const after = await this.prisma.website.update({ where: { id }, data: dto });
+    const after = await this.prisma.website.update({
+      where: { id },
+      data: { ...dto, extraDomains: dto.extraDomains ? [...new Set(dto.extraDomains.map((d) => d.toLowerCase()))] : undefined },
+    });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'website.update', entityType: 'website', entityId: id, before, after });
-    return after;
+    return this.withSdk(after);
   }
 
   @Get('landing-pages')

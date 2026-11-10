@@ -5,6 +5,8 @@ import { postbackQueueProvider } from './common/queues';
 import { ConversionService } from './postbacks/conversion.service';
 import { ClickService } from './tracking/click.service';
 import { TrackerController } from './tracking/tracker.controller';
+import { EventsService } from './tracking/events.service';
+import { SdkController } from './tracking/sdk.controller';
 
 /**
  * Proses "tracker": endpoint publik klik & postback masuk.
@@ -12,7 +14,7 @@ import { TrackerController } from './tracking/tracker.controller';
  */
 @Module({
   imports: [loggerModule('tracker'), CoreModule],
-  controllers: [TrackerController],
-  providers: [ClickService, ConversionService, postbackQueueProvider(REDIS)],
+  controllers: [TrackerController, SdkController],
+  providers: [ClickService, ConversionService, EventsService, postbackQueueProvider(REDIS)],
 })
 export class TrackerModule {}
