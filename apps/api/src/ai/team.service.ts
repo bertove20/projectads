@@ -392,7 +392,7 @@ export class AiTeamService {
   private renderReport(p: ParsedReport) {
     return [
       p.summary,
-      ...(p.findings.length ? ['', '**Temuan**', ...p.findings.map((f) => `- ${f.text} _(${f.evidence.join(', ')})_`)] : []),
+      ...(p.findings.length ? ['', '**Temuan**', ...p.findings.map((f) => `- ${f.text} (bukti ${f.evidence.join(', ')})`)] : []),
       ...(p.questions.length ? ['', '**Pertanyaan untuk rekan**', ...p.questions.map((q) => `- ke ${POSITION_LABEL[q.to]}: ${q.question}`)] : []),
     ].join('\n');
   }
@@ -487,8 +487,8 @@ export class AiTeamService {
       if (!raw) continue;
       const d = parseDiscussion(raw, state.known, new Set(mine.map((q) => q.ref)), new Set(others.map((p) => p.ref)));
       const lines = [
-        ...d.answers.map((a) => `- Jawaban ${a.questionRef}: ${a.text}${a.evidence.length ? ` _(${a.evidence.join(', ')})_` : ''}`),
-        ...d.reviews.map((r) => `- ${r.stance === 'SUPPORT' ? 'Mendukung' : r.stance === 'OBJECT' ? 'Keberatan' : 'Info'} ${r.proposalRef}: ${r.text}${r.evidence.length ? ` _(${r.evidence.join(', ')})_` : ''}`),
+        ...d.answers.map((a) => `- Jawaban ${a.questionRef}: ${a.text}${a.evidence.length ? ` (bukti ${a.evidence.join(', ')})` : ''}`),
+        ...d.reviews.map((r) => `- ${r.stance === 'SUPPORT' ? 'Mendukung' : r.stance === 'OBJECT' ? 'Keberatan' : 'Info'} ${r.proposalRef}: ${r.text}${r.evidence.length ? ` (bukti ${r.evidence.join(', ')})` : ''}`),
       ];
       await this.note(state, agent.id, 'DISCUSSION', lines.join('\n') || '(tidak ada tanggapan)', { stage: 'discussion', data: d as unknown as Prisma.InputJsonValue });
       for (const r of d.reviews) discussion.set(r.proposalRef, [...(discussion.get(r.proposalRef) ?? []), { agent: agent.name, stance: r.stance, text: r.text, evidence: r.evidence }]);

@@ -13,6 +13,8 @@ interface NavItem {
   href: string;
   label: string;
   permission: string;
+  /** Endpoint jumlah (badge) */
+  badge?: 'approvals';
 }
 
 /** Navigasi sesuai role (read.md 11). Menu fase berikutnya ditambahkan saat modulnya selesai. */
@@ -38,6 +40,9 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     section: 'AI',
     items: [
       { href: '/assistant', label: 'AI Assistant', permission: 'ai.use' },
+      { href: '/ai/team', label: 'Tim AI', permission: 'ai.supervise' },
+      { href: '/approvals', label: 'Approval Center', permission: 'ai.supervise', badge: 'approvals' },
+      { href: '/ai/oversight', label: 'Pengawasan AI', permission: 'ai.supervise' },
       { href: '/ai/skills', label: 'Skill Library', permission: 'ai.use' },
       { href: '/ai/settings', label: 'Pengaturan AI', permission: 'ai.manage' },
     ],
@@ -128,6 +133,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                       >
                         {active && <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full bg-primary" />}
                         {i.label}
+                        {i.badge === 'approvals' && <ApprovalBadge />}
                       </Link>
                     </li>
                   );
@@ -138,6 +144,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
     </div>
+  );
+}
+
+/** Jumlah usulan Tim AI yang menunggu keputusan owner. */
+function ApprovalBadge() {
+  const q = useOrgQuery<{ pending: number }>('/ai/approvals/count', { refetchInterval: 30_000 });
+  if (!q.data?.pending) return null;
+  return (
+    <span className="tabular ml-auto rounded-sm bg-primary px-1.5 text-[11px] font-semibold text-primary-fg" aria-label={`${q.data.pending} menunggu keputusan`}>
+      {q.data.pending}
+    </span>
   );
 }
 

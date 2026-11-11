@@ -262,6 +262,13 @@ export class TeamController {
     );
   }
 
+  /** Badge navigasi: jumlah usulan menunggu owner. */
+  @Get('approvals/count')
+  @RequirePermissions('ai.supervise')
+  async approvalCount(@Org() org: OrgContext) {
+    return { pending: await this.prisma.aiProposal.count({ where: { organizationId: org.organizationId, status: 'PENDING_OWNER' } }) };
+  }
+
   @Post('approvals/:id/decide')
   @RequirePermissions('ai.approve')
   @HttpCode(200)

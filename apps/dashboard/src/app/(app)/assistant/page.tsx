@@ -358,7 +358,7 @@ function AssistantInner() {
             </Button>
           </div>
           <p className="mx-auto mt-1 max-w-3xl text-[11px] text-muted">
-            Jawaban AI bisa keliru. Periksa angka di laporan sebelum mengambil keputusan.
+            Jawaban AI bisa keliru. Periksa angka di laporan sebelum mengambil keputusan. Percakapan AI dapat diaudit oleh Owner untuk transparansi.
             {conv.data && ` Percakapan dimulai ${dateTime(conv.data.messages[0]?.createdAt, org.timezone)}.`}
           </p>
         </form>
