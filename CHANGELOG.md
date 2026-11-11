@@ -5,6 +5,17 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 
 ## [Unreleased] — branch `develop`
 
+### Ditambahkan (Phase 6 — Tim AI otonom, read.md Bagian 23)
+- **Struktur tim**: Owner → Kepala Tim AI → 8 karyawan AI per jabatan. Karyawan AI melapor ke Kepala Tim AI, bukan langsung ke owner.
+- **Rapat harian & evaluasi campaign**: terjadwal (jam rapat per organisasi) atau manual; tahap laporan → diskusi antar-agent (tanya-jawab & tanggapan usulan) → rangkuman Kepala Tim + evaluasi per campaign + progres goal.
+- **Perintah owner**: owner memberi permintaan ke Kepala Tim AI → rencana & pembagian tugas ke agent terkait → laporan → rangkuman untuk owner.
+- **Reason dengan data, ditegakkan server**: setiap hasil tool menjadi bukti ber-ID (E1, E2, …); temuan/usulan tanpa bukti valid atau di luar wewenang jabatan ditolak sistem dan tercatat.
+- **Goal tim**: profit, ROI, revenue, konversi, CPA, spend — harian/mingguan/bulanan, per organisasi atau per campaign.
+- **Approval Center**: usulan yang diteruskan Kepala Tim AI dengan alasan, bukti, tanggapan rekan, dan pratinjau sebelum–sesudah; owner menyetujui (server mengeksekusi + audit log), menolak, atau meminta revisi (otomatis jadi perintah baru ke Kepala Tim). Aksi tahap ini: buat tugas, ubah status campaign internal, blokir/izinkan zone (daftar internal).
+- **Kontrol owner**: tombol darurat (hentikan semua sesi & blokir eksekusi), aktif/nonaktif & model per agent, instruksi khusus per agent, budget harian tim dan per sesi.
+- **Transparansi**: owner membaca seluruh transkrip tim AI dan percakapan AI Assistant karyawan (setiap pembukaan tercatat di audit log; karyawan diberi tahu).
+- Izin baru `ai.supervise` dan `ai.approve` (default hanya Owner).
+
 ### Ditambahkan (Phase 5 — AI Workspace & Skill Library)
 - **Gateway OpenRouter** (server-side): API key diuji lalu disimpan terenkripsi, tidak pernah dikirim ke browser; model registry disinkron dari OpenRouter (harga, konteks, dukungan tool) dan hanya model yang diaktifkan admin yang bisa dipakai.
 - **AI Assistant per jabatan**: 8 agent (Strategy, Media Buyer, Analytics, Tracking, Fraud, Creative, CRO, Automation); model, fallback, temperature, maks token, budget harian/bulanan per jabatan dengan override per karyawan; budget organisasi & batas request.
