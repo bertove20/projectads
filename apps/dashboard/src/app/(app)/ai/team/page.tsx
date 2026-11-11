@@ -14,6 +14,12 @@ import { useSession } from '@/lib/session';
 import { Goal, GoalMetric, GoalPeriod, goalTarget, METRIC_LABEL, PERIOD_LABEL, RUN_STATUS, RunSummary, STAGE_LABEL, TeamAgent, TeamOverview } from '@/lib/team';
 import type { Campaign } from '@/lib/types';
 import { useQueryClient } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
+import { STATE_LABEL } from '@/components/office-3d';
+import type { LiveTeam } from '@/lib/team';
+
+// WebGL hanya di browser; dimuat terpisah agar halaman lain tidak menanggung ukuran three.js.
+const Office3D = dynamic(() => import('@/components/office-3d'), { ssr: false, loading: () => <div className="grid h-[420px] place-items-center text-[13px] text-muted">Memuat kantor 3D…</div> });
 
 function AgentTile({ a, onEdit }: { a: TeamAgent; onEdit: () => void }) {
   const sup = a.role === 'SUPERVISOR';
@@ -362,6 +368,9 @@ function TeamPage() {
   const qc = useQueryClient();
   const team = useOrgQuery<TeamOverview>('/ai/team', { refetchInterval: 15_000 });
   const runs = useOrgQuery<RunSummary[]>('/ai/team/runs', { refetchInterval: 5_000 });
+  const live = useOrgQuery<LiveTeam>('/ai/team/live', { refetchInterval: 3_000 });
+  const [view, setView] = useState<'3d' | 'tree'>('3d');
+  const [picked, setPicked] = useState<string | null>(null);
   const goals = useOrgQuery<Goal[]>('/ai/goals');
   const models = useOrgQuery<AiModelRow[]>(can('ai.manage') ? '/ai/models' : null);
   const campaigns = useOrgQuery<Campaign[]>('/campaigns');
@@ -434,7 +443,60 @@ function TeamPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">
-          <section aria-label="Struktur tim" className="rounded-lg border border-border bg-surface p-4">
+          <section aria-label="Tim AI" className="overflow-hidden rounded-lg border border-border bg-surface">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
+              <div role="tablist" aria-label="Tampilan tim" className="flex gap-1">
+                {(['3d', 'tree'] as const).map((v) => (
+                  <button key={v} role="tab" type="button" aria-selected={view === v} onClick={() => setView(v)} className={cn('rounded-md px-2.5 py-1 text-[13px]', view === v ? 'bg-primary-soft font-medium text-primary' : 'text-muted hover:text-text')}>
+                    {v === '3d' ? 'Kantor 3D' : 'Struktur'}
+                  </button>
+                ))}
+              </div>
+              <Link href="/ai/team/chat" className="text-[13px] font-medium text-primary hover:underline">
+                Buka Ruang Tim (chat) →
+              </Link>
+            </div>
+            {view === '3d' ? (
+              <div className="relative">
+                {live.data ? (
+                  <Office3D agents={live.data.agents} selectedId={picked} onSelect={setPicked} />
+                ) : (
+                  <div className="grid h-[420px] place-items-center text-[13px] text-muted">Memuat status tim…</div>
+                )}
+                {(() => {
+                  const a = live.data?.agents.find((x) => x.id === picked);
+                  if (!a) return <p className="pointer-events-none absolute bottom-3 left-4 text-xs text-muted">Klik karyawan AI untuk melihat pekerjaannya · seret untuk memutar</p>;
+                  return (
+                    <div className="absolute right-3 bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-sm sm:left-auto sm:w-80">
+                      <div className="flex items-center gap-2.5">
+                        <AgentAvatar name={a.name} supervisor={a.role === 'SUPERVISOR'} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-semibold">{a.name}</p>
+                          <p className="text-xs text-muted">
+                            {STATE_LABEL[a.state]}
+                            {a.activity && a.state !== 'idle' ? ` · ${a.activity}` : ''}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => setPicked(null)} className="text-xs text-muted hover:text-text" aria-label="Tutup">
+                          ✕
+                        </button>
+                      </div>
+                      {a.snippet && <p className="mt-2 line-clamp-3 text-[12.5px] text-muted">“{a.snippet}”</p>}
+                      {a.lastActiveAt && <p className="mt-1 text-[11px] text-muted">Aktivitas terakhir {dateTime(a.lastActiveAt)}</p>}
+                      <div className="mt-2 flex gap-2">
+                        <Link href={`/ai/team/chat?agent=${a.id}`} className="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-[12.5px] font-medium text-primary-fg">
+                          Chat kerja & ingatan
+                        </Link>
+                        <Button size="sm" variant="secondary" onClick={() => setEdit(t.agents.find((x) => x.id === a.id) ?? null)}>
+                          Pengaturan
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+          <div className="p-4">
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-2.5 rounded-lg border border-border-strong bg-surface-2/60 px-3 py-2">
                 <span aria-hidden className="grid size-8 place-items-center rounded-md bg-text text-[11px] font-semibold text-surface">
@@ -465,6 +527,8 @@ function TeamPage() {
               </Link>{' '}
               (Kepala Tim memakai model Ads Manager). Klik agent untuk menonaktifkan, mengganti model, atau memberi instruksi khusus.
             </p>
+          </div>
+            )}
           </section>
           <Directive disabled={blocked} />
           <RunList runs={runs.data ?? []} />

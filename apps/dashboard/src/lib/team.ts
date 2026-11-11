@@ -197,3 +197,76 @@ export function agentInitials(name: string): string {
     .join('')
     .toUpperCase();
 }
+
+export type LiveState = 'idle' | 'working' | 'talking' | 'meeting' | 'off' | 'paused';
+
+export interface LiveAgent {
+  id: string;
+  key: string;
+  name: string;
+  role: 'SUPERVISOR' | 'WORKER';
+  position: Position | null;
+  state: LiveState;
+  activity: string | null;
+  snippet: string | null;
+  lastActiveAt: string | null;
+  runId: string | null;
+}
+
+export interface LiveTeam {
+  paused: boolean;
+  running: { id: string; title: string; stage: string | null; kind: RunKind; status: RunStatus }[];
+  agents: LiveAgent[];
+}
+
+export interface FeedMessage {
+  id: string;
+  runId: string;
+  agentId: string | null;
+  authorId: string | null;
+  authorName: string | null;
+  kind: RunMessage['kind'];
+  stage: string | null;
+  content: string;
+  toolName: string | null;
+  evidenceId: string | null;
+  createdAt: string;
+  data: unknown;
+  via: string | null;
+  run: { title: string; kind: RunKind };
+}
+
+export type MemoryKind = 'OUTCOME' | 'LESSON' | 'FEEDBACK' | 'NOTE';
+
+export interface Memory {
+  id: string;
+  agentId: string | null;
+  kind: MemoryKind;
+  content: string;
+  runId: string | null;
+  proposalId: string | null;
+  evidence: unknown;
+  pinned: boolean;
+  createdAt: string;
+}
+
+export interface AgentDetail {
+  id: string;
+  key: string;
+  name: string;
+  role: 'SUPERVISOR' | 'WORKER';
+  position: Position | null;
+  positionLabel: string;
+  enabled: boolean;
+  allowedActions: { key: ProposalAction; label: string }[];
+  proposals: Partial<Record<ProposalStatus, number>>;
+  month: { requests: number; costUsd: number };
+  memories: Memory[];
+}
+
+export const MEMORY_KIND: Record<MemoryKind, { label: string; tone: 'green' | 'blue' | 'yellow' | 'gray' }> = {
+  OUTCOME: { label: 'Hasil nyata', tone: 'green' },
+  LESSON: { label: 'Pelajaran', tone: 'blue' },
+  FEEDBACK: { label: 'Keputusan', tone: 'yellow' },
+  NOTE: { label: 'Catatan owner', tone: 'gray' },
+};

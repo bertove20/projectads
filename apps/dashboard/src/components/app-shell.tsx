@@ -41,9 +41,11 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     items: [
       { href: '/assistant', label: 'AI Assistant', permission: 'ai.use' },
       { href: '/ai/team', label: 'Tim AI', permission: 'ai.supervise' },
+      { href: '/ai/team/chat', label: 'Ruang Tim', permission: 'ai.supervise' },
       { href: '/approvals', label: 'Approval Center', permission: 'ai.supervise', badge: 'approvals' },
       { href: '/ai/oversight', label: 'Pengawasan AI', permission: 'ai.supervise' },
       { href: '/ai/skills', label: 'Skill Library', permission: 'ai.use' },
+      { href: '/ai/chat-settings', label: 'Telegram & Discord', permission: 'org.read' },
       { href: '/ai/settings', label: 'Pengaturan AI', permission: 'ai.manage' },
     ],
   },
@@ -83,6 +85,8 @@ function isActive(pathname: string, href: string) {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { can, org, me, switchOrg } = useSession();
   const pathname = usePathname();
+  // Menu paling spesifik yang cocok (mis. /ai/team/chat tidak ikut menandai /ai/team).
+  const bestHref = NAV.flatMap((g) => g.items.map((i) => i.href)).filter((h) => isActive(pathname, h)).sort((a, b) => b.length - a.length)[0];
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
@@ -119,7 +123,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               <p className="mb-1 px-2 text-xs text-muted">{group.section}</p>
               <ul>
                 {items.map((i) => {
-                  const active = isActive(pathname, i.href);
+                  const active = i.href === bestHref;
                   return (
                     <li key={i.href}>
                       <Link

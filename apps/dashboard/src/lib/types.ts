@@ -346,12 +346,15 @@ export interface AlertItem {
 
 export interface NotificationChannel {
   id: string;
-  type: 'TELEGRAM';
+  type: 'TELEGRAM' | 'DISCORD';
   name: string;
   target: string;
   secretHint: string | null;
   minSeverity: Severity;
   enabled: boolean;
+  commandsEnabled: boolean;
+  teamUpdates: boolean;
+  config: { applicationId?: string | null; publicKey?: string | null } | null;
   lastTestAt: string | null;
   createdAt: string;
 }
