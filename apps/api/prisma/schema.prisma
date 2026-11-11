@@ -63,6 +63,8 @@ model Organization {
   aiGoals            AiGoal[]
   aiRuns             AiRun[]
   aiProposals        AiProposal[]
+  aiMemories         AiAgentMemory[]
+  chatIdentities     ChatIdentity[]
 
   @@map("organizations")
 }
@@ -180,6 +182,8 @@ model Membership {
   savedViews       SavedView[]
   aiConfig         AiMemberConfig?
   aiConversations  AiConversation[]
+  chatIdentities   ChatIdentity[]
+  chatLinkCodes    ChatLinkCode[]
   skillAssignments AiSkillAssignment[]
 
   @@unique([userId, organizationId])
@@ -836,22 +840,31 @@ model Alert {
 
 enum ChannelType {
   TELEGRAM
+  DISCORD
 }
 
 model NotificationChannel {
-  id             String      @id @default(uuid()) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
-  type           ChannelType
-  name           String
-  /// Chat ID tujuan (grup/channel/user) — bukan rahasia
-  target         String
-  /// Kredensial (mis. token bot Telegram), terenkripsi AES-256-GCM
-  secretEnc      String      @map("secret_enc")
-  secretHint     String?     @map("secret_hint")
-  minSeverity    Severity    @default(WARNING) @map("min_severity")
-  enabled        Boolean     @default(true)
-  lastTestAt     DateTime?   @map("last_test_at")
-  createdAt      DateTime    @default(now()) @map("created_at")
+  id              String      @id @default(uuid()) @db.Uuid
+  organizationId  String      @map("organization_id") @db.Uuid
+  type            ChannelType
+  name            String
+  /// Telegram: chat ID tujuan. Discord: guild (server) ID — bukan rahasia
+  target          String
+  /// Kredensial terenkripsi AES-256-GCM. Telegram: token bot. Discord: JSON { webhookUrl, botToken? }
+  secretEnc       String      @map("secret_enc")
+  /// Discord: { applicationId, publicKey } (bukan rahasia)
+  config          Json?
+  /// Terima perintah dari chat (Telegram long polling / Discord slash command)
+  commandsEnabled Boolean     @default(false) @map("commands_enabled")
+  /// Kirim kabar Tim AI (rapat selesai, usulan menunggu) ke channel ini
+  teamUpdates     Boolean     @default(true) @map("team_updates")
+  /// Telegram: update_id berikutnya untuk getUpdates
+  pollOffset      BigInt?     @map("poll_offset")
+  secretHint      String?     @map("secret_hint")
+  minSeverity     Severity    @default(WARNING) @map("min_severity")
+  enabled         Boolean     @default(true)
+  lastTestAt      DateTime?   @map("last_test_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
 
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   deliveries   NotificationDelivery[]
@@ -1627,10 +1640,11 @@ model AiAgent {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  model        AiModel?       @relation("AgentModel", fields: [modelId], references: [id], onDelete: SetNull)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  model        AiModel?        @relation("AgentModel", fields: [modelId], references: [id], onDelete: SetNull)
   messages     AiRunMessage[]
   proposals    AiProposal[]
+  memories     AiAgentMemory[]
 
   @@unique([organizationId, key])
   @@map("ai_agents")
@@ -1699,6 +1713,8 @@ model AiRun {
   meetingDate    String?     @map("meeting_date")
   /// Tahap berjalan: plan | report | discussion | summary
   stage          String?
+  /// Asal perintah: dashboard | { platform, channelId, chatId, messageId } untuk balasan ke chat
+  origin         Json?
   /// Rangkuman akhir Kepala Tim AI (Markdown) dan data terstruktur (evaluasi campaign, goal)
   summary        String?
   brief          Json?
@@ -1795,6 +1811,8 @@ model AiProposal {
   decidedById    String?        @map("decided_by_id") @db.Uuid
   decidedAt      DateTime?      @map("decided_at")
   executedAt     DateTime?      @map("executed_at")
+  /// Evaluasi dampak setelah eksekusi sudah dicatat ke ingatan agent
+  outcomeAt      DateTime?      @map("outcome_at")
   /// Pratinjau sebelum-sesudah dan hasil eksekusi
   result         Json?
   createdAt      DateTime       @default(now()) @map("created_at")
@@ -1807,4 +1825,74 @@ model AiProposal {
   @@unique([runId, ref])
   @@index([organizationId, status])
   @@map("ai_proposals")
+}
+
+enum MemoryKind {
+  /// Hasil nyata keputusan/eksekusi (dihitung server)
+  OUTCOME
+  /// Pelajaran yang ditulis agent dengan bukti
+  LESSON
+  /// Keputusan & catatan owner
+  FEEDBACK
+  /// Catatan manual owner
+  NOTE
+}
+
+/// Ingatan kerja karyawan AI (agentId null = berlaku untuk seluruh tim). Dimuat ke prompt sesi berikutnya.
+model AiAgentMemory {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  agentId        String?    @map("agent_id") @db.Uuid
+  kind           MemoryKind
+  content        String
+  runId          String?    @map("run_id") @db.Uuid
+  proposalId     String?    @map("proposal_id") @db.Uuid
+  /// Bukti yang mendasari (ID bukti sesi asal) atau angka hasil evaluasi
+  evidence       Json?
+  pinned         Boolean    @default(false)
+  createdById    String?    @map("created_by_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        AiAgent?     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, agentId, createdAt])
+  @@map("ai_agent_memories")
+}
+
+enum ChatPlatform {
+  TELEGRAM
+  DISCORD
+}
+
+/// Akun Telegram/Discord yang ditautkan ke anggota EAIP (otorisasi perintah memakai permission EAIP).
+model ChatIdentity {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  membershipId   String       @map("membership_id") @db.Uuid
+  platform       ChatPlatform
+  externalUserId String       @map("external_user_id")
+  username       String?
+  linkedAt       DateTime     @default(now()) @map("linked_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, platform, externalUserId])
+  @@index([membershipId])
+  @@map("chat_identities")
+}
+
+/// Kode tautan sekali pakai (hash SHA-256), berlaku 10 menit.
+model ChatLinkCode {
+  id           String    @id @default(uuid()) @db.Uuid
+  membershipId String    @map("membership_id") @db.Uuid
+  codeHash     String    @unique @map("code_hash")
+  expiresAt    DateTime  @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@map("chat_link_codes")
 }
