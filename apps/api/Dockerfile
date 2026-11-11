@@ -13,13 +13,12 @@ RUN npm ci --workspace apps/api --include-workspace-root=false --no-audit --no-f
 COPY apps/api apps/api
 RUN npm run build --workspace apps/api
 
-FROM base AS prod-deps
-COPY package.json package-lock.json ./
-COPY apps/api/package.json apps/api/
-RUN npm ci --workspace apps/api --include-workspace-root=false --omit=dev --no-audit --no-fund \
+# Dependensi produksi = hasil instalasi tahap build dikurangi devDependencies.
+# Tidak ada instalasi kedua dari registry: postinstall Prisma (unduh engine) hanya berjalan sekali,
+# dan Prisma Client yang sudah di-generate di tahap build ikut terbawa.
+FROM build AS prod-deps
+RUN npm prune --omit=dev --workspace apps/api --include-workspace-root=false --no-audit --no-fund \
   && mkdir -p apps/api/node_modules
-COPY apps/api/prisma apps/api/prisma
-RUN cd apps/api && npx prisma generate
 
 FROM base AS runtime
 ENV NODE_ENV=production
