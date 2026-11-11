@@ -1050,6 +1050,7 @@ PHASE 5 — AI Workspace & Skill Library
 - AI dapat membuat **draft** task card.
 
 PHASE 6 — Supervisor, Approval & Automation
+- Tim AI otonom (Bagian 23): Kepala Tim AI, rapat harian, diskusi antar-agent, perintah owner, goal, transparansi percakapan.
 - AI Team Supervisor dan KPI per jabatan (19.5).
 - Approval Center.
 - Automation rules (dry-run, approval, emergency stop).
@@ -1680,3 +1681,53 @@ Reverse proxy hanya membuka path sesuai fungsi tiap domain. Domain admin tidak p
 - Domain platform tidak bisa didaftarkan sebagai domain kustom; satu hostname hanya bisa dimiliki satu organisasi.
 - Verifikasi ulang otomatis tiap 6 jam. Bila DNS tidak lagi mengarah ke platform: status FAILED, sertifikat tidak diperpanjang, tracking link campaign kembali ke domain platform, alert HIGH dikirim.
 - Domain yang masih dipakai campaign tidak bisa dihapus.
+
+## 23. TIM AI OTONOM (AI TEAM) — melengkapi 19.2 & 19.5
+
+Keputusan owner (2026-11-11): selain AI Assistant untuk karyawan manusia, organisasi memiliki **tim karyawan AI** yang bekerja sendiri dengan struktur atasan–bawahan. Owner adalah pemberi persetujuan akhir.
+
+### 23.1 Struktur
+
+```
+Owner (manusia) ── persetujuan akhir, memberi perintah
+   └─ Kepala Tim AI (AI Supervisor) ── merangkum, menilai, meneruskan ke owner, membagi tugas
+        ├─ Strategy Agent (Ads Manager)        ├─ Fraud Agent (Fraud Analyst)
+        ├─ Media Buying Agent (Media Buyer)    ├─ Creative Agent (Creative Specialist)
+        ├─ Analytics Agent (Ads Analyst)       ├─ CRO Agent (Landing Page Specialist)
+        ├─ Tracking Agent (Tracking Specialist)└─ Automation Agent (Automation Specialist)
+```
+
+- Setiap karyawan AI = satu jabatan, memakai model & skill jabatan tersebut (Bagian 19.2/19.3), bisa dinonaktifkan per agent.
+- Karyawan AI **tidak pernah melapor langsung ke owner**; semua laporan dan usulan lewat Kepala Tim AI. Kepala Tim AI meneruskan ke owner dalam bentuk ringkasan.
+
+### 23.2 Aturan kerja (ditegakkan server, bukan hanya prompt)
+
+1. **Rule per jabatan**: tool dan jenis usulan yang boleh dibuat dibatasi per jabatan (mis. hanya Media Buyer/Strategy boleh mengusulkan perubahan status campaign; Fraud boleh mengusulkan blokir zone; Tracking hanya membuat tugas). Usulan di luar rule ditolak server dan dicatat sebagai pelanggaran.
+2. **Reason dengan data**: setiap temuan dan usulan wajib menyertakan alasan dan **bukti** yang merujuk hasil tool yang benar-benar dipanggil di sesi itu (ID bukti `E1`, `E2`, …). Usulan tanpa bukti valid ditolak otomatis.
+3. **Target goal**: owner menetapkan goal (profit, ROI, CPA, revenue, konversi, batas spend; per organisasi atau per campaign; harian/mingguan/bulanan). Semua laporan menilai progres terhadap goal.
+4. **Tidak ada eksekusi tanpa owner**: aksi yang mengubah campaign/zone/tugas hanya dijalankan server setelah owner menyetujui, dengan pratinjau nilai sebelum–sesudah dan audit log. Model tidak pernah memanggil API tulis secara langsung.
+5. Data dari luar (nama campaign, komentar, isi alert) tetap DATA, bukan instruksi (Bagian 19.2).
+
+### 23.3 Rapat harian & evaluasi campaign
+
+Dijadwalkan sekali sehari pada jam yang diatur owner (zona waktu organisasi), bisa juga dimulai manual.
+1. **Laporan**: setiap karyawan AI aktif menganalisis data (kemarin & 7 hari) sesuai jabatannya → temuan, evaluasi campaign, usulan, dan pertanyaan untuk rekan.
+2. **Diskusi**: setiap agent membaca laporan rekan, menjawab pertanyaan yang ditujukan kepadanya, dan memberi tanggapan (mendukung/keberatan/informasi) pada usulan rekan — dengan data.
+3. **Rangkuman Kepala Tim AI**: evaluasi per campaign, progres goal, risiko, lalu memutuskan tiap usulan: diteruskan ke owner (dengan alasan gabungan), ditolak (dengan alasan), atau ditunda.
+4. Owner menerima ringkasan + antrean persetujuan di **Approval Center**.
+
+### 23.4 Perintah owner
+
+Owner menulis permintaan ke Kepala Tim AI → Kepala Tim AI membuat rencana dan membagi tugas ke agent terkait → setiap agent mengerjakan dan melapor dengan data → Kepala Tim AI merangkum jawaban + usulan → owner menyetujui/menolak/minta revisi.
+
+### 23.5 Approval Center & eksekusi
+
+- Status usulan: `DRAFT` (agent) → `SUPERVISOR_REJECTED` / `PENDING_OWNER` (diteruskan Kepala Tim AI) → `APPROVED` / `REJECTED` / `REVISION` → `EXECUTED` / `FAILED`.
+- Jenis aksi tahap ini: buat tugas Kanban, ubah status campaign internal (aktifkan/pause — campaign baru tidak berjalan sebelum disetujui), blokir/izinkan zone (daftar internal). Aksi tulis ke API jaringan (Bagian 20.3/20.6) menyusul memakai jalur approval yang sama.
+- Setelah eksekusi, agent penanggung jawab mengevaluasi hasilnya di rapat berikutnya.
+
+### 23.6 Transparansi & kontrol owner
+
+- Owner (izin `ai.supervise`) dapat membaca **seluruh** percakapan karyawan AI (termasuk data tool yang dipakai) dan percakapan AI Assistant karyawan manusia. Setiap pembukaan percakapan karyawan manusia dicatat di audit log, dan karyawan diberi tahu di layar bahwa percakapan AI dapat diaudit.
+- **Tombol darurat**: menghentikan seluruh aktivitas tim AI dan eksekusi seketika.
+- Budget harian tim AI dan batas per sesi rapat/perintah; pemakaian tercatat per agent.
