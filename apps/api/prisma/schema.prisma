@@ -58,6 +58,11 @@ model Organization {
   aiConversations    AiConversation[]
   aiUsageLogs        AiUsageLog[]
   aiSkills           AiSkill[]
+  aiTeamSettings     AiTeamSettings?
+  aiAgents           AiAgent[]
+  aiGoals            AiGoal[]
+  aiRuns             AiRun[]
+  aiProposals        AiProposal[]
 
   @@map("organizations")
 }
@@ -466,6 +471,7 @@ model Campaign {
   zoneLists      ZoneListEntry[]
   routes         CampaignRoute[]
   taskCards      TaskCard[]
+  aiGoals        AiGoal[]
   trackingDomain TrackingDomain? @relation(fields: [trackingDomainId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status])
@@ -1340,6 +1346,7 @@ model AiModel {
   positionFallbacks AiPositionConfig[] @relation("PositionFallback")
   memberModels      AiMemberConfig[]   @relation("MemberModel")
   memberFallbacks   AiMemberConfig[]   @relation("MemberFallback")
+  agents            AiAgent[]          @relation("AgentModel")
 
   @@unique([organizationId, modelId])
   @@map("ai_models")
@@ -1451,12 +1458,17 @@ model AiUsageLog {
   status           AiUsageStatus
   error            String?
   latencyMs        Int?          @map("latency_ms")
+  /// Karyawan AI (tim otonom) & sesi rapat/perintah; null untuk AI Assistant manusia
+  agentId          String?       @map("agent_id") @db.Uuid
+  runId            String?       @map("run_id") @db.Uuid
   createdAt        DateTime      @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
   @@index([membershipId, createdAt])
+  @@index([agentId, createdAt])
+  @@index([runId])
   @@map("ai_usage_logs")
 }
 
@@ -1568,4 +1580,231 @@ model AiTaskDraft {
 
   @@index([membershipId, status])
   @@map("ai_task_drafts")
+}
+
+// ───────────── Tim AI otonom (read.md Bagian 23) ─────────────
+
+/// Pengaturan tim AI per organisasi; `paused` = tombol darurat.
+model AiTeamSettings {
+  organizationId String    @id @map("organization_id") @db.Uuid
+  enabled        Boolean   @default(false)
+  paused         Boolean   @default(false)
+  pausedAt       DateTime? @map("paused_at")
+  pausedById     String?   @map("paused_by_id") @db.Uuid
+  meetingEnabled Boolean   @default(true) @map("meeting_enabled")
+  /// Jam rapat harian HH:MM dalam zona waktu organisasi
+  meetingTime    String    @default("09:00") @map("meeting_time")
+  /// Batas biaya seluruh tim AI per hari (USD); null = tanpa batas (tetap tunduk budget organisasi)
+  dailyBudgetUsd Decimal?  @map("daily_budget_usd") @db.Decimal(12, 4)
+  /// Batas biaya satu sesi rapat/perintah (USD)
+  runBudgetUsd   Decimal   @default(1) @map("run_budget_usd") @db.Decimal(12, 4)
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_team_settings")
+}
+
+enum AgentRole {
+  SUPERVISOR
+  WORKER
+}
+
+/// Karyawan AI: satu Kepala Tim (SUPERVISOR) dan satu agent per jabatan (WORKER).
+model AiAgent {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  /// "SUPERVISOR" atau nama jabatan (mis. "MEDIA_BUYER")
+  key            String
+  role           AgentRole
+  position       Position?
+  name           String
+  enabled        Boolean   @default(true)
+  /// Override model; null = model jabatan (Kepala Tim: model Ads Manager)
+  modelId        String?   @map("model_id") @db.Uuid
+  /// Catatan/instruksi tambahan dari owner (instruksi tepercaya)
+  instructions   String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  model        AiModel?       @relation("AgentModel", fields: [modelId], references: [id], onDelete: SetNull)
+  messages     AiRunMessage[]
+  proposals    AiProposal[]
+
+  @@unique([organizationId, key])
+  @@map("ai_agents")
+}
+
+enum GoalMetric {
+  PROFIT
+  ROI
+  REVENUE
+  CONVERSIONS
+  CPA
+  SPEND
+}
+
+enum GoalPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// Target yang dikejar tim AI. PROFIT/ROI/REVENUE/CONVERSIONS: >= target; CPA/SPEND: <= target.
+model AiGoal {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  title          String
+  metric         GoalMetric
+  target         Decimal    @db.Decimal(18, 6)
+  period         GoalPeriod
+  campaignId     String?    @map("campaign_id") @db.Uuid
+  active         Boolean    @default(true)
+  createdById    String?    @map("created_by_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, active])
+  @@map("ai_goals")
+}
+
+enum AiRunKind {
+  MEETING
+  DIRECTIVE
+}
+
+enum AiRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+/// Satu sesi kerja tim AI: rapat harian atau perintah owner.
+model AiRun {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  kind           AiRunKind
+  status         AiRunStatus @default(QUEUED)
+  title          String
+  /// Permintaan owner (DIRECTIVE)
+  directive      String?
+  requestedById  String?     @map("requested_by_id") @db.Uuid
+  /// Tanggal rapat (YYYY-MM-DD zona waktu organisasi), mencegah rapat ganda
+  meetingDate    String?     @map("meeting_date")
+  /// Tahap berjalan: plan | report | discussion | summary
+  stage          String?
+  /// Rangkuman akhir Kepala Tim AI (Markdown) dan data terstruktur (evaluasi campaign, goal)
+  summary        String?
+  brief          Json?
+  costUsd        Decimal     @default(0) @map("cost_usd") @db.Decimal(14, 8)
+  error          String?
+  startedAt      DateTime?   @map("started_at")
+  finishedAt     DateTime?   @map("finished_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     AiRunMessage[]
+  proposals    AiProposal[]
+
+  @@unique([organizationId, kind, meetingDate])
+  @@index([organizationId, createdAt])
+  @@map("ai_runs")
+}
+
+enum AiRunMessageKind {
+  DIRECTIVE
+  PLAN
+  ASSIGNMENT
+  REPORT
+  DISCUSSION
+  SUMMARY
+  TOOL
+  NOTE
+  ERROR
+}
+
+/// Transkrip lengkap sesi tim AI (termasuk data tool sebagai bukti), terbuka untuk owner.
+model AiRunMessage {
+  id         String           @id @default(uuid()) @db.Uuid
+  runId      String           @map("run_id") @db.Uuid
+  /// null = owner/sistem
+  agentId    String?          @map("agent_id") @db.Uuid
+  authorId   String?          @map("author_id") @db.Uuid
+  kind       AiRunMessageKind
+  stage      String?
+  content    String
+  data       Json?
+  toolName   String?          @map("tool_name")
+  /// ID bukti untuk dirujuk temuan/usulan (mis. "E3")
+  evidenceId String?          @map("evidence_id")
+  modelId    String?          @map("model_id")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  run   AiRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agent AiAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([runId, createdAt])
+  @@map("ai_run_messages")
+}
+
+enum ProposalAction {
+  CREATE_TASK
+  CAMPAIGN_STATUS
+  ZONE_LIST
+}
+
+enum ProposalStatus {
+  DRAFT
+  SUPERVISOR_REJECTED
+  PENDING_OWNER
+  APPROVED
+  REJECTED
+  REVISION
+  EXECUTED
+  FAILED
+}
+
+/// Usulan karyawan AI -> dinilai Kepala Tim AI -> diputuskan owner -> dieksekusi server.
+model AiProposal {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  runId          String         @map("run_id") @db.Uuid
+  agentId        String         @map("agent_id") @db.Uuid
+  /// Nomor di dalam sesi (P1, P2, ...)
+  ref            String
+  action         ProposalAction
+  title          String
+  reason         String
+  /// [{ id: "E1", tool, label }]: bukti yang benar-benar diambil di sesi ini
+  evidence       Json
+  payload        Json
+  campaignId     String?        @map("campaign_id") @db.Uuid
+  risk           String         @default("MEDIUM")
+  expectedImpact String?        @map("expected_impact")
+  status         ProposalStatus @default(DRAFT)
+  /// Tanggapan rekan saat diskusi: [{ agent, stance, text }]
+  discussion     Json?
+  supervisorNote String?        @map("supervisor_note")
+  ownerNote      String?        @map("owner_note")
+  decidedById    String?        @map("decided_by_id") @db.Uuid
+  decidedAt      DateTime?      @map("decided_at")
+  executedAt     DateTime?      @map("executed_at")
+  /// Pratinjau sebelum-sesudah dan hasil eksekusi
+  result         Json?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  run          AiRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agent        AiAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, ref])
+  @@index([organizationId, status])
+  @@map("ai_proposals")
 }
