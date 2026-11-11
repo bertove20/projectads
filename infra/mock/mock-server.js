@@ -121,6 +121,53 @@ http
         const usage = { prompt_tokens: 1000, completion_tokens: 200, total_tokens: 1200, cost: 0.0015 };
         const reply = (message) => json(res, 200, { id: 'gen-' + received.length, object: 'chat.completion', model: b.model, choices: [{ index: 0, finish_reason: message.tool_calls ? 'tool_calls' : 'stop', message: { role: 'assistant', ...message } }], usage });
         const call = (name, args) => reply({ content: null, tool_calls: [{ id: 'call_' + received.length, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+        // ── Tim AI otonom: agent menutup kerja lewat tool submit_* ──
+        const submit = toolNames.find((n) => /^submit_/.test(n));
+        if (submit) {
+          const all = msgs.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
+          const toolMsgs = msgs.filter((m) => m.role === 'tool').map((m) => String(m.content));
+          const evid = [...new Set(toolMsgs.join('\n').match(/"evidenceId":"E\d+"/g) ?? [])].map((x) => x.slice(14, -1));
+          const uuids = [...new Set(toolMsgs.join('\n').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) ?? [])];
+          const sys = String(msgs[0]?.content ?? '');
+          const dataTool = ['list_campaigns', 'goal_progress', 'postback_health', 'list_alerts'].find((n) => toolNames.includes(n));
+          // Langkah 1: ambil data dulu (menghasilkan bukti) bila belum ada hasil tool.
+          if (!toolMsgs.length && dataTool) return call(dataTool, dataTool === 'postback_health' ? { days: 7 } : {});
+          if (submit === 'submit_plan') {
+            const enumPos = b.tools.find((t) => t.function.name === 'submit_plan').function.parameters.properties.assignments.items.properties.position.enum;
+            const pick = ['MEDIA_BUYER', 'FRAUD_ANALYST'].filter((p) => enumPos.includes(p));
+            return call('submit_plan', { understanding: 'Owner minta evaluasi campaign yang rugi.', assignments: pick.map((p) => ({ position: p, instruction: 'Evaluasi campaign dengan data 7 hari, usulkan tindakan.' })) });
+          }
+          if (submit === 'submit_report') {
+            const cid = uuids[0];
+            const proposals = [];
+            const questions = [];
+            if (sys.includes('jabatan Media Buyer')) {
+              if (cid) proposals.push({ action: 'CAMPAIGN_STATUS', title: 'Pause campaign rugi', reason: 'ROI negatif 7 hari berturut-turut', evidence: evid.slice(0, 1), risk: 'MEDIUM', campaignId: cid, status: 'PAUSED' });
+              proposals.push({ action: 'CREATE_TASK', title: 'Siapkan creative baru', reason: 'CTR turun 30% minggu ini', evidence: ['E999'] });
+              questions.push({ to: 'FRAUD_ANALYST', question: 'Apakah ada zone dengan bot tinggi?' });
+            } else if (sys.includes('jabatan Fraud Analyst')) {
+              if (cid) proposals.push({ action: 'ZONE_LIST', title: 'Blokir zone 5552', reason: 'Bot 70% dan 0 konversi 7 hari', evidence: evid.slice(0, 1), risk: 'LOW', campaignId: cid, zoneId: '5552', listType: 'BLACKLIST' });
+            } else if (sys.includes('jabatan Tracking Specialist')) {
+              proposals.push({ action: 'CAMPAIGN_STATUS', title: 'Aktifkan campaign', reason: 'tracking sudah sehat semua', evidence: evid.slice(0, 1), campaignId: cid, status: 'ACTIVE' });
+              proposals.push({ action: 'CREATE_TASK', title: 'Uji ulang postback affiliate', reason: 'Ada postback keluar gagal 7 hari terakhir', evidence: evid.slice(0, 1), priority: 'HIGH' });
+            }
+            return call('submit_report', { summary: 'Laporan berbasis data ' + evid.join(','), findings: [{ text: 'Data diperiksa', evidence: evid.slice(0, 1) }, { text: 'Klaim tanpa bukti', evidence: ['E777'] }], proposals, questions });
+          }
+          if (submit === 'submit_discussion') {
+            const q = (all.match(/Q\d+ dari/g) ?? []).map((x) => x.split(' ')[0]);
+            const p = [...new Set(all.match(/- P\d+ oleh/g) ?? [])].map((x) => x.split(' ')[1]);
+            return call('submit_discussion', { answers: q.map((ref) => ({ questionRef: ref, text: 'Ya, zone 5552 bot tinggi', evidence: evid.slice(0, 1) })), reviews: p.slice(0, 1).map((ref) => ({ proposalRef: ref, stance: 'SUPPORT', text: 'Setuju, data mendukung', evidence: evid.slice(0, 1) })) });
+          }
+          if (submit === 'submit_summary') {
+            const p = [...new Set(all.match(/- P\d+ oleh/g) ?? [])].map((x) => x.split(' ')[1]);
+            const cid = (all.match(/campaign ([0-9a-f-]{36})/) ?? [])[1];
+            return call('submit_summary', {
+              summary: '## Rangkuman\nTim menemukan campaign rugi dan zone bot. ' + p.length + ' usulan dinilai.',
+              campaignEvaluations: cid ? [{ campaignId: cid, verdict: 'OPTIMIZE', note: 'ROI negatif', evidence: evid.slice(0, 1) }] : [],
+              decisions: p.map((ref, i) => ({ proposalRef: ref, decision: i === p.length - 1 && p.length > 2 ? 'REJECT' : 'FORWARD', note: i === p.length - 1 && p.length > 2 ? 'Prioritas rendah' : 'Didukung data' })),
+            });
+          }
+        }
         if (last.role === 'tool') return reply({ content: 'Ringkasan dari data: ' + String(last.content).slice(0, 400) });
         const text = String(last.content ?? '').toLowerCase();
         const today = new Date().toISOString().slice(0, 10);

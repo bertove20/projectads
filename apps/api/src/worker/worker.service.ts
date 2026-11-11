@@ -18,7 +18,10 @@ import {
   QUEUE_NETWORK_SYNC,
   QUEUE_NOTIFY,
   QUEUE_POSTBACK,
+  QUEUE_AI_TEAM,
+  AiTeamJob,
 } from '../common/queues';
+import { AiTeamService } from '../ai/team.service';
 import { ENV, Env } from '../config/env';
 import { API_SUPPORTED_NETWORKS, NetworkSyncService } from '../networks/network-sync.service';
 import { DeliveryService } from '../postbacks/delivery.service';
@@ -47,6 +50,7 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
     private readonly notifications: NotificationService,
     private readonly alerts: AlertService,
     private readonly domains: DomainsService,
+    private readonly aiTeam: AiTeamService,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(POSTBACK_QUEUE) private readonly postbackQueue: Queue<PostbackJob>,
     @Inject(NETWORK_SYNC_QUEUE) private readonly syncQueue: Queue<NetworkSyncJob>,
@@ -85,17 +89,27 @@ export class WorkerService implements OnModuleInit, OnApplicationShutdown {
       concurrency: 5,
     });
 
+    // Tim AI otonom: sesi rapat/perintah berjalan lama (banyak panggilan model berurutan).
+    const aiTeamWorker = new Worker<AiTeamJob>(QUEUE_AI_TEAM, async (job) => this.aiTeam.process(job.data.runId), {
+      connection: this.conn(),
+      concurrency: 2,
+      lockDuration: 15 * 60_000,
+    });
+    aiTeamWorker.on('failed', (job, err) => this.logger.warn({ runId: job?.data.runId, err: err.message }, 'Sesi tim AI gagal'));
+
     this.maintenance = new Queue(QUEUE_MAINTENANCE, { connection: this.redis });
     await this.maintenance.upsertJobScheduler('sweep', { every: SWEEP_EVERY_MS }, { name: 'sweep' });
     await this.maintenance.upsertJobScheduler('schedule-syncs', { every: this.env.SYNC_INTERVAL_MINUTES * 60_000 }, { name: 'schedule-syncs' });
     await this.maintenance.upsertJobScheduler('verify-domains', { every: 6 * 3600_000 }, { name: 'verify-domains' });
+    await this.maintenance.upsertJobScheduler('ai-meetings', { every: this.env.AI_TEAM_SCHEDULE_SECONDS * 1000 }, { name: 'ai-meetings' });
     const maintenanceWorker = new Worker(
       QUEUE_MAINTENANCE,
-      async (job) => (job.name === 'schedule-syncs' ? this.scheduleSyncs() : job.name === 'verify-domains' ? this.verifyDomains() : this.sweep()),
+      async (job) =>
+        job.name === 'schedule-syncs' ? this.scheduleSyncs() : job.name === 'verify-domains' ? this.verifyDomains() : job.name === 'ai-meetings' ? this.aiTeam.scheduleMeetings() : this.sweep(),
       { connection: this.conn(), concurrency: 1 },
     );
 
-    this.workers = [postbackWorker, syncWorker, notifyWorker, maintenanceWorker];
+    this.workers = [postbackWorker, syncWorker, notifyWorker, aiTeamWorker, maintenanceWorker];
     this.logger.log({ syncEveryMinutes: this.env.SYNC_INTERVAL_MINUTES }, 'Worker berjalan');
   }
 

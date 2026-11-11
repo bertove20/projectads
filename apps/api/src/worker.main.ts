@@ -6,7 +6,11 @@ import { AlertService } from './alerts/alert.service';
 import { NotificationService } from './alerts/notification.service';
 import { CoreModule, REDIS } from './common/core.module';
 import { loggerModule } from './common/logger';
-import { networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } from './common/queues';
+import { aiTeamQueueProvider, networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } from './common/queues';
+import { AiService } from './ai/ai.service';
+import { AiToolsService } from './ai/ai-tools';
+import { AiTeamService } from './ai/team.service';
+import { AnalyticsService } from './reports/analytics.service';
 import { NetworkSyncService } from './networks/network-sync.service';
 import { DeliveryService } from './postbacks/delivery.service';
 import { WorkerService } from './worker/worker.service';
@@ -23,12 +27,17 @@ import { dnsResolverProvider } from './domains/resolver.provider';
     NotificationService,
     AlertService,
     TasksService,
+    AnalyticsService,
+    AiService,
+    AiToolsService,
+    AiTeamService,
     DomainsService,
     dnsResolverProvider,
     WorkerService,
     postbackQueueProvider(REDIS),
     networkSyncQueueProvider(REDIS),
     notifyQueueProvider(REDIS),
+    aiTeamQueueProvider(REDIS),
   ],
 })
 class WorkerModule {}

@@ -62,3 +62,19 @@ export function postbackQueueProvider(redisToken: symbol): Provider {
     useFactory: (redis: Redis) => new Queue<PostbackJob>(QUEUE_POSTBACK, { connection: redis }),
   };
 }
+
+/** Tim AI otonom: satu job = satu sesi rapat/perintah (read.md Bagian 23). */
+export const QUEUE_AI_TEAM = 'ai-team';
+export const AI_TEAM_QUEUE = Symbol('AI_TEAM_QUEUE');
+
+export interface AiTeamJob {
+  runId: string;
+}
+
+export function aiTeamQueueProvider(redisToken: symbol): Provider {
+  return {
+    provide: AI_TEAM_QUEUE,
+    inject: [redisToken],
+    useFactory: (redis: Redis) => new Queue<AiTeamJob>(QUEUE_AI_TEAM, { connection: redis }),
+  };
+}

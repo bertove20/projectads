@@ -782,6 +782,121 @@ async function main() {
   check('skill bisa dinonaktifkan per karyawan', !ws2.skills.some((s) => s.key === `zone-checklist-${RUN}`));
   check('Media Buyer tidak bisa mengelola skill', (await buyer.post('/ai/skills', { skillMd, category: 'x', positions: [], tools: [], riskClass: 'READ_ONLY', source: 'CUSTOM' })).status === 403);
 
+  console.log('\n[27] Phase 6 — Tim AI otonom: akses, goal, perintah owner');
+  check('Media Buyer tidak bisa membuka tim AI', (await buyer.get('/ai/team')).status === 403);
+  check('Media Buyer tidak bisa memberi keputusan akhir', (await buyer.post(`/ai/approvals/00000000-0000-4000-8000-000000000000/decide`, { decision: 'APPROVE' })).status === 403);
+  await admin.patch('/ai/team/settings', { enabled: false });
+  const offRun = await admin.post('/ai/team/directives', { text: 'Evaluasi semua campaign' });
+  check('tim AI nonaktif: perintah ditolak', offRun.status === 422 && offRun.body?.error?.code === 'TEAM_DISABLED', offRun.body);
+  for (const p of ['ADS_MANAGER', 'FRAUD_ANALYST', 'TRACKING_SPECIALIST']) await admin.put(`/ai/positions/${p}`, { modelId: mid['mock/fast-tools'].id, fallbackModelId: null });
+  await admin.patch('/ai/team/settings', { enabled: true, meetingEnabled: false, runBudgetUsd: 1, dailyBudgetUsd: null });
+  await admin.post('/ai/team/emergency-stop', { paused: false });
+  const t_team = (await admin.get('/ai/team')).body;
+  check('9 karyawan AI: Kepala Tim + 8 jabatan', t_team?.agents?.length === 9 && t_team.agents[0].key === 'SUPERVISOR', t_team?.agents?.map((a) => a.key));
+  check('model Kepala Tim mengikuti jabatan Ads Manager', t_team?.agents?.[0]?.model?.modelId === 'mock/fast-tools', t_team?.agents?.[0]);
+  check('rule jabatan terlihat: Tracking hanya buat tugas', JSON.stringify(t_team?.agents?.find((a) => a.key === 'TRACKING_SPECIALIST')?.allowedActions.map((x) => x.key)) === '["CREATE_TASK"]');
+  const noTools = await admin.patch(`/ai/team/agents/${t_team?.agents?.[1]?.id}`, { modelId: mid['mock/no-tools'].id });
+  check('model tanpa tool calling ditolak untuk karyawan AI', noTools.status === 422 && noTools.body?.error?.code === 'MODEL_NO_TOOLS', noTools.body);
+  const goal = await admin.post('/ai/goals', { title: `Profit harian ${RUN}`, metric: 'PROFIT', target: 50, period: 'DAILY' });
+  check('owner menetapkan goal', goal.status === 201 && goal.body.target === 50, goal.body);
+
+  const dir = await admin.post('/ai/team/directives', { text: 'Evaluasi campaign yang rugi dan usulkan tindakan.' });
+  check('perintah owner ke Kepala Tim AI diterima (antre)', dir.status === 201 && !!dir.body.runId, dir.body);
+  let t_run = null;
+  for (let i = 0; i < 60; i++) {
+    t_run = (await admin.get(`/ai/team/runs/${dir.body?.runId}`)).body;
+    if (t_run && !['QUEUED', 'RUNNING'].includes(t_run.status)) break;
+    await sleep(1000);
+  }
+  check('sesi perintah selesai', t_run?.status === 'COMPLETED', { status: t_run?.status, error: t_run?.error });
+  const kinds = t_run?.messages?.map((m) => m.kind) ?? [];
+  check('alur: perintah → rencana → tugas → laporan → rangkuman', kinds[0] === 'DIRECTIVE' && kinds.includes('PLAN') && kinds.filter((k) => k === 'ASSIGNMENT').length === 2 && kinds.filter((k) => k === 'REPORT').length === 2 && kinds.at(-1) === 'SUMMARY', kinds);
+  check('karyawan AI berdiskusi (menjawab pertanyaan/menanggapi usulan rekan)', kinds.includes('DISCUSSION'), kinds);
+  const toolsMsgs = t_run?.messages?.filter((m) => m.kind === 'TOOL') ?? [];
+  check('setiap hasil tool tercatat sebagai bukti (E1, E2, …) beserta datanya', toolsMsgs.length >= 3 && toolsMsgs.every((m) => /^E\d+$/.test(m.evidenceId) && m.data?.result), toolsMsgs.map((m) => m.evidenceId));
+  const notes = t_run?.messages?.filter((m) => m.kind === 'NOTE').map((m) => m.content) ?? [];
+  check('usulan tanpa bukti valid ditolak sistem', notes.some((n) => n.includes('Siapkan creative baru') && n.includes('bukti')), notes);
+  const mbReport = t_run?.messages?.find((m) => m.kind === 'REPORT' && m.agent?.key === 'MEDIA_BUYER');
+  check('temuan dengan bukti palsu (E777) tidak masuk laporan', mbReport && !mbReport.content.includes('Klaim tanpa bukti') && mbReport.content.includes('Data diperiksa'), mbReport?.content);
+  const props = t_run?.proposals ?? [];
+  const pause = props.find((p) => p.action === 'CAMPAIGN_STATUS');
+  const zone = props.find((p) => p.action === 'ZONE_LIST');
+  check('usulan valid dari Media Buyer & Fraud tersimpan dengan bukti', !!pause && !!zone && pause.evidence.length > 0 && zone.payload.listType === 'BLACKLIST', props.map((p) => [p.ref, p.action, p.status]));
+  check('tanggapan rekan menempel di usulan', props.some((p) => Array.isArray(p.discussion) && p.discussion[0]?.stance === 'SUPPORT'), props.map((p) => p.discussion));
+  check('Kepala Tim AI meneruskan usulan ke owner dengan catatan', props.filter((p) => p.status === 'PENDING_OWNER').length >= 2 && props.every((p) => p.supervisorNote), props.map((p) => [p.ref, p.status, p.supervisorNote]));
+  check('pratinjau sebelum–sesudah untuk owner', pause?.preview && pause.preview.after === 'PAUSED' && 'before' in pause.preview, pause?.preview);
+  check('rangkuman Kepala Tim tersimpan untuk owner', t_run?.summary?.includes('Rangkuman') && t_run?.costUsd > 0, { summary: t_run?.summary, cost: t_run?.costUsd });
+  const t_ev = await admin.get(`/ai/team/runs/${t_run?.id}/evidence/${pause?.evidence?.[0]}`);
+  check('bukti usulan bisa dibuka owner', t_ev.status === 200 && t_ev.body?.toolName && t_ev.body.data?.result, t_ev.status);
+  const usageAgents = (await admin.get('/ai/team')).body;
+  check('pemakaian hari ini tercatat per karyawan AI', usageAgents?.spentToday > 0 && usageAgents.agents.find((a) => a.key === 'SUPERVISOR')?.today.requests > 0);
+
+  console.log('\n[28] Phase 6 — Approval Center & eksekusi');
+  const pending = (await admin.get('/ai/approvals')).body;
+  check('Approval Center berisi usulan menunggu owner', Array.isArray(pending) && pending.some((p) => p.id === pause?.id), pending?.length);
+  await admin.post('/ai/team/emergency-stop', { paused: true });
+  const blocked = await admin.post(`/ai/approvals/${pause?.id}/decide`, { decision: 'APPROVE' });
+  check('tombol darurat memblokir eksekusi', blocked.status === 422 && blocked.body?.error?.code === 'TEAM_PAUSED', blocked.body);
+  const pausedDir = await admin.post('/ai/team/directives', { text: 'Coba lagi saat dihentikan' });
+  check('tombol darurat menolak sesi baru', pausedDir.status === 422 && pausedDir.body?.error?.code === 'TEAM_PAUSED');
+  await admin.post('/ai/team/emergency-stop', { paused: false });
+  await admin.patch(`/campaigns/${pause?.campaignId}`, { status: 'ACTIVE' });
+  const campBefore = (await admin.get(`/campaigns/${pause?.campaignId}`)).body?.status;
+  const ok1 = await admin.post(`/ai/approvals/${pause?.id}/decide`, { decision: 'APPROVE', note: 'Setuju' });
+  const campAfter = (await admin.get(`/campaigns/${pause?.campaignId}`)).body?.status;
+  check('disetujui owner → server mengeksekusi perubahan status campaign', ok1.status === 200 && ok1.body.status === 'EXECUTED' && campAfter === 'PAUSED', { res: ok1.body, campBefore, campAfter });
+  check('usulan yang sudah diputuskan tidak bisa diputuskan lagi', (await admin.post(`/ai/approvals/${pause?.id}/decide`, { decision: 'APPROVE' })).status === 422);
+  const t_audit = (await admin.get('/audit-logs?limit=50')).body;
+  const auditRows = t_audit?.items ?? t_audit ?? [];
+  check('eksekusi tercatat di audit log dengan nilai sebelum–sesudah', auditRows.some((a) => a.action === 'campaign.update' && a.entityId === pause?.campaignId && a.after?.via === `ai_proposal:${pause?.id}`), auditRows.slice(0, 3).map((a) => a.action));
+  const okZone = await admin.post(`/ai/approvals/${zone?.id}/decide`, { decision: 'APPROVE' });
+  check('blokir zone disetujui → masuk daftar internal', okZone.status === 200 && okZone.body.status === 'EXECUTED' && okZone.body.result?.after === 'BLACKLIST', okZone.body);
+  const rest = (await admin.get(`/ai/team/runs/${t_run?.id}`)).body.proposals.filter((p) => p.status === 'PENDING_OWNER');
+  check('revisi wajib catatan', rest[0] ? (await admin.post(`/ai/approvals/${rest[0].id}/decide`, { decision: 'REVISION' })).status === 422 : true);
+  if (rest[0]) {
+    const rev = await admin.post(`/ai/approvals/${rest[0].id}/decide`, { decision: 'REVISION', note: 'Tambahkan data per zone' });
+    check('minta revisi → Kepala Tim AI menerima perintah revisi', rev.status === 200 && rev.body.status === 'REVISION' && !!rev.body.revisionRunId, rev.body);
+  }
+
+  console.log('\n[29] Phase 6 — rapat harian & transparansi percakapan');
+  const meet = await admin.post('/ai/team/meetings', {});
+  const meetingRunId = meet.body?.runId;
+  check('rapat dimulai manual oleh owner', meet.status === 201 && !!meetingRunId, meet.body);
+  let mrun = null;
+  for (let i = 0; i < 90; i++) {
+    mrun = (await admin.get(`/ai/team/runs/${meetingRunId}`)).body;
+    if (mrun && !['QUEUED', 'RUNNING'].includes(mrun.status)) break;
+    await sleep(1000);
+  }
+  const mkinds = mrun?.messages?.map((m) => m.kind) ?? [];
+  check('rapat: laporan semua jabatan yang punya model, diskusi, rangkuman', mrun?.status === 'COMPLETED' && mkinds.filter((k) => k === 'REPORT').length === 4 && mkinds.includes('DISCUSSION') && mkinds.at(-1) === 'SUMMARY', { status: mrun?.status, mkinds, err: mrun?.error });
+  check('jabatan tanpa model tercatat tidak bekerja (transparan)', mrun?.messages?.some((m) => m.kind === 'NOTE' && m.content.includes('belum ada model')));
+  check('Tracking Agent mencoba usulan di luar wewenang → ditolak sistem', mrun?.messages?.some((m) => m.kind === 'NOTE' && m.agent?.key === 'TRACKING_SPECIALIST' && m.content.includes('wewenang')));
+  check('evaluasi campaign harian dari Kepala Tim', Array.isArray(mrun?.brief?.campaignEvaluations) && mrun.brief.campaignEvaluations.length >= 1, mrun?.brief);
+  // Rapat terjadwal: jam rapat sudah lewat → penjadwal worker membuat rapat harian (sekali per hari).
+  await admin.patch('/ai/team/settings', { meetingEnabled: true, meetingTime: '00:00' });
+  let sched = [];
+  for (let i = 0; i < 40; i++) {
+    sched = ((await admin.get('/ai/team/runs?kind=MEETING')).body ?? []).filter((r) => r.title.startsWith('Rapat harian') && r.meetingDate);
+    if (sched.length) break;
+    await sleep(1000);
+  }
+  const today = sched[0]?.meetingDate;
+  check('penjadwal membuat rapat harian otomatis', !!today, sched.map((r) => r.title));
+  await sleep(12_000);
+  const again = ((await admin.get('/ai/team/runs?kind=MEETING')).body ?? []).filter((r) => r.meetingDate === today);
+  check('rapat harian terjadwal hanya sekali per hari', again.length === 1, again.length);
+  await admin.patch('/ai/team/settings', { meetingEnabled: false });
+
+  const ov = (await admin.get(`/ai/oversight/conversations?membershipId=${buyerMember?.id}`)).body;
+  check('owner melihat daftar percakapan AI karyawan', Array.isArray(ov) && ov.some((c) => c.id === conv1 && c.member.id === buyerMember?.id), ov?.length);
+  const ov1 = await admin.get(`/ai/oversight/conversations/${conv1}`);
+  check('owner membaca isi percakapan karyawan (termasuk tool)', ov1.status === 200 && ov1.body.messages.some((m) => m.role === 'TOOL'), ov1.status);
+  const audit2 = (await admin.get('/audit-logs?limit=20')).body;
+  check('pembukaan percakapan karyawan tercatat di audit log', (audit2?.items ?? audit2 ?? []).some((a) => a.action === 'ai.conversation.view' && a.entityId === conv1));
+  check('karyawan biasa tidak bisa membuka pengawasan', (await buyer.get('/ai/oversight/conversations')).status === 403);
+  await admin.patch(`/ai/goals/${goal.body?.id}`, { active: false });
+
   console.log('\n[16] Endpoint daftar dengan parameter yang dipakai dashboard');
   admin.org = orgA;
   const rq = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200`;

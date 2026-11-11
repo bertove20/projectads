@@ -10,7 +10,15 @@ import { ENV, Env } from '../config/env';
 import { approxTokens, budgetViolation, estimateCost, periodStarts, pick, sanitizeText, titleFrom, toolPayload } from './ai-core';
 import { AiToolsService } from './ai-tools';
 import { AGENT_NAME, BUILTIN_SKILLS } from './builtin-skills';
-import { OpenRouterClient, OpenRouterError, OrChatResponse, OrMessage, OrToolCall } from './openrouter.client';
+import { OpenRouterClient, OpenRouterError, OrChatResponse, OrMessage, OrTool, OrToolCall } from './openrouter.client';
+
+export interface UsageBase {
+  organizationId: string;
+  membershipId?: string | null;
+  conversationId?: string | null;
+  agentId?: string | null;
+  runId?: string | null;
+}
 
 const MAX_TOOL_ROUNDS = 4;
 const MAX_TOOL_CALLS_PER_ROUND = 5;
@@ -239,7 +247,9 @@ export class AiService {
 
       for (let round = 0; ; round++) {
         const finalRound = round >= MAX_TOOL_ROUNDS;
-        const res = await this.complete(client, cfg, org.organizationId, membershipId, conv.id, messages, finalRound ? [] : tools);
+        const res = await this.complete(client, cfg, { organizationId: org.organizationId, membershipId, conversationId: conv.id }, messages, finalRound ? [] : tools, async (estimate) =>
+          budgetViolation(cfg.limits, await this.spent(org.organizationId, membershipId), estimate),
+        );
         const msg = res.response.choices?.[0]?.message;
         const calls = (msg?.tool_calls ?? []).slice(0, MAX_TOOL_CALLS_PER_ROUND);
         if (!calls.length || finalRound) {
@@ -266,16 +276,26 @@ export class AiService {
     }
   }
 
-  /** Satu panggilan model dengan cek budget, fallback, dan pencatatan biaya. */
-  private async complete(client: OpenRouterClient, cfg: ResolvedConfig, organizationId: string, membershipId: string, conversationId: string, messages: OrMessage[], tools: ReturnType<AiToolsService['toolsFor']>): Promise<{ response: OrChatResponse; modelId: string }> {
+  /**
+   * Satu panggilan model dengan cek budget (callback), fallback, dan pencatatan biaya.
+   * Dipakai AI Assistant (per karyawan) dan Tim AI otonom (per agent & sesi).
+   */
+  async complete(
+    client: OpenRouterClient,
+    cfg: Pick<ResolvedConfig, 'model' | 'fallback' | 'maxTokens' | 'temperature'> & { position: Position | null },
+    usage: UsageBase,
+    messages: OrMessage[],
+    tools: OrTool[],
+    checkBudget: (estimate: number) => Promise<string | null>,
+  ): Promise<{ response: OrChatResponse; modelId: string; costUsd: number }> {
     const candidates = [cfg.model!, ...(cfg.fallback ? [cfg.fallback] : [])];
     let lastErr: OpenRouterError | null = null;
     for (let i = 0; i < candidates.length; i++) {
       const m = candidates[i];
       const promptTokens = approxTokens(JSON.stringify(messages)) + approxTokens(JSON.stringify(tools));
       const estimate = estimateCost(promptTokens, cfg.maxTokens, Number(m.promptPrice), Number(m.completionPrice));
-      const violation = budgetViolation(cfg.limits, await this.spent(organizationId, membershipId), estimate);
-      const base = { organizationId, membershipId, conversationId, position: cfg.position, modelId: m.modelId, usedFallback: i > 0, estimatedCostUsd: estimate };
+      const violation = await checkBudget(estimate);
+      const base = { ...usage, position: cfg.position, modelId: m.modelId, usedFallback: i > 0, estimatedCostUsd: estimate };
       if (violation) {
         await this.prisma.aiUsageLog.create({ data: { ...base, status: 'BLOCKED', error: violation } });
         throw new UnprocessableEntityException({ code: 'AI_BUDGET', message: violation });
@@ -295,7 +315,7 @@ export class AiService {
         // Biaya aktual dari OpenRouter; bila tidak ada, hitung dari token × harga registry.
         const cost = typeof u.cost === 'number' ? u.cost : pt * Number(m.promptPrice) + ct * Number(m.completionPrice);
         await this.prisma.aiUsageLog.create({ data: { ...base, promptTokens: pt, completionTokens: ct, costUsd: cost, status: 'OK', latencyMs: Date.now() - started } });
-        return { response, modelId: m.modelId };
+        return { response, modelId: m.modelId, costUsd: cost };
       } catch (err) {
         if (!(err instanceof OpenRouterError)) throw err;
         lastErr = err;

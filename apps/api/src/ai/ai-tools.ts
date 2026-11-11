@@ -3,17 +3,19 @@ import { AlertStatus, Prisma, TaskPriority } from '@prisma/client';
 import type { OrgContext } from '../common/decorators';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { campaignIdScope, campaignScope } from '../common/scope';
-import { isDateString } from '../common/tz';
+import { dateInTz, isDateString } from '../common/tz';
 import type { PermissionKey } from '../rbac/permissions';
 import { AnalyticsService, GroupBy } from '../reports/analytics.service';
 import { cardScope } from '../tasks/tasks.service';
 import { sanitizeText } from './ai-core';
+import { addDays, goalMet, goalRange, localDayStart } from './team-core';
 import type { OrTool } from './openrouter.client';
 
 export interface ToolContext {
   org: OrgContext;
-  conversationId: string;
-  membershipId: string;
+  /** null untuk karyawan AI (tim otonom) */
+  conversationId: string | null;
+  membershipId: string | null;
   timezone: string;
 }
 
@@ -147,6 +149,7 @@ export class AiToolsService {
       permission: 'tasks.read',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
       run: async ({ org, membershipId }) => {
+        if (!membershipId) throw new ToolInputError('Tool ini hanya untuk karyawan manusia');
         const rows = await this.prisma.taskCard.findMany({
           where: { AND: [cardScope(org), { archivedAt: null, completedAt: null, OR: [{ ownerMembershipId: membershipId }, { assignees: { some: { membershipId } } }] }] },
           select: { number: true, title: true, priority: true, dueDate: true, column: { select: { name: true } }, dependsOn: { select: { dependsOn: { select: { completedAt: true } } } } },
@@ -173,6 +176,7 @@ export class AiToolsService {
         additionalProperties: false,
       },
       run: async ({ org, conversationId, membershipId }, a) => {
+        if (!conversationId || !membershipId) throw new ToolInputError('Tool ini hanya untuk karyawan manusia');
         const title = sanitizeText(a.title, 200).trim();
         if (title.length < 3) throw new ToolInputError('title minimal 3 karakter');
         const priority = a.priority && String(a.priority) in TaskPriority ? (String(a.priority) as TaskPriority) : 'MEDIUM';
@@ -188,6 +192,65 @@ export class AiToolsService {
           data: { organizationId: org.organizationId, conversationId, membershipId, title, description: a.description ? sanitizeText(a.description, 4000) : null, priority, campaignId, dueDate },
         });
         return { draftId: d.id, status: 'PENDING', note: 'Draft tampil di layar pengguna untuk disetujui atau ditolak.' };
+      },
+    },
+    goal_progress: {
+      description: 'Goal/target yang ditetapkan owner beserta nilai aktual periode berjalan (harian = kemarin, mingguan = 7 hari penuh terakhir, bulanan = bulan berjalan).',
+      permission: 'analytics.read',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      run: async ({ org, timezone }) => {
+        const goals = await this.prisma.aiGoal.findMany({ where: { organizationId: org.organizationId, active: true }, include: { campaign: { select: { name: true } } }, orderBy: { createdAt: 'asc' }, take: 20 });
+        const today = dateInTz(new Date(), timezone);
+        const out = [];
+        for (const g of goals) {
+          const range = goalRange(g.period, today);
+          const r = await this.analytics.report(org, { from: localDayStart(range.from, timezone), to: localDayStart(addDays(range.to, 1), timezone), groupBy: 'campaign', campaignId: g.campaignId ?? undefined });
+          const t = r.totals;
+          const actual = { PROFIT: t.profit, ROI: t.roi, REVENUE: t.revenue, CONVERSIONS: t.conversions, CPA: t.cpa, SPEND: t.spend }[g.metric] ?? null;
+          const target = Number(g.target);
+          out.push({
+            goalId: g.id,
+            title: sanitizeText(g.title, 120),
+            metric: g.metric,
+            period: g.period,
+            campaign: g.campaignId ? { id: g.campaignId, name: sanitizeText(g.campaign?.name, 120) } : 'semua campaign',
+            range,
+            target,
+            actual: round(actual, 4),
+            met: goalMet(g.metric, actual, target),
+            currency: r.currency,
+          });
+        }
+        return { goals: out, note: out.length ? undefined : 'Owner belum menetapkan goal' };
+      },
+    },
+    team_tasks: {
+      description: 'Ringkasan kartu Kanban terbuka seluruh tim (judul, kolom, prioritas, tenggat, campaign, sumber), maksimal 60.',
+      permission: 'tasks.read',
+      parameters: { type: 'object', properties: { campaignId: { type: 'string' } }, additionalProperties: false },
+      run: async ({ org }, a) => {
+        const campaignId = a.campaignId && UUID_RE.test(String(a.campaignId)) ? String(a.campaignId) : undefined;
+        const rows = await this.prisma.taskCard.findMany({
+          where: { AND: [cardScope(org), { archivedAt: null, completedAt: null, ...(campaignId ? { campaignId } : {}) }] },
+          select: { number: true, title: true, priority: true, dueDate: true, source: true, campaignId: true, column: { select: { name: true, kind: true } } },
+          orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],
+          take: 60,
+        });
+        return rows.map((c) => ({ ref: `T-${c.number}`, title: sanitizeText(c.title, 200), column: c.column.name, kind: c.column.kind, priority: c.priority, dueDate: c.dueDate?.toISOString().slice(0, 10) ?? null, source: c.source, campaignId: c.campaignId }));
+      },
+    },
+    recent_decisions: {
+      description: 'Usulan tim AI 30 hari terakhir dan keputusan owner/Kepala Tim (agar tidak mengulang usulan yang sudah ditolak, dan menilai hasil eksekusi).',
+      permission: 'tasks.read',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      run: async ({ org }) => {
+        const rows = await this.prisma.aiProposal.findMany({
+          where: { organizationId: org.organizationId, createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } },
+          select: { ref: true, action: true, title: true, status: true, campaignId: true, supervisorNote: true, ownerNote: true, createdAt: true, executedAt: true, agent: { select: { name: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 40,
+        });
+        return rows.map((p) => ({ agent: p.agent.name, action: p.action, title: sanitizeText(p.title, 200), status: p.status, campaignId: p.campaignId, supervisorNote: sanitizeText(p.supervisorNote, 300) || null, ownerNote: sanitizeText(p.ownerNote, 300) || null, date: p.createdAt.toISOString().slice(0, 10), executedAt: p.executedAt?.toISOString() ?? null }));
       },
     },
   };

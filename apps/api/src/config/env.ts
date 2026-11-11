@@ -68,6 +68,8 @@ const schema = z.object({
   OPENROUTER_API_BASE: z.string().url().default('https://openrouter.ai/api/v1'),
   /** Batas waktu satu request ke model (ms) */
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(300000).default(90000),
+  /** Interval cek jadwal rapat harian Tim AI (detik) */
+  AI_TEAM_SCHEDULE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
   /** Interval sinkronisasi statistik jaringan (menit). */
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(15).default(60),
   /** Jumlah hari ke belakang yang disinkronkan ulang untuk menangkap data terlambat. */

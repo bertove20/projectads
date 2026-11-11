@@ -12,7 +12,7 @@ import { RoutesController } from './catalog/routes.controller';
 import { WebsitesController } from './catalog/websites.controller';
 import { CoreModule, REDIS } from './common/core.module';
 import { loggerModule } from './common/logger';
-import { networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } from './common/queues';
+import { aiTeamQueueProvider, networkSyncQueueProvider, notifyQueueProvider, postbackQueueProvider } from './common/queues';
 import { AlertService } from './alerts/alert.service';
 import { AlertsController } from './alerts/alerts.controller';
 import { HealthController } from './health.controller';
@@ -30,6 +30,8 @@ import { AiAdminController } from './ai/ai-admin.controller';
 import { AiToolsService } from './ai/ai-tools';
 import { AiService } from './ai/ai.service';
 import { AssistantController } from './ai/assistant.controller';
+import { TeamController } from './ai/team.controller';
+import { AiTeamService } from './ai/team.service';
 import { SkillsController } from './ai/skills.controller';
 import { TaskStreamService } from './tasks/task-stream.service';
 import { TasksController } from './tasks/tasks.controller';
@@ -63,6 +65,7 @@ import { TeamsController } from './tasks/teams.controller';
     AiAdminController,
     SkillsController,
     AssistantController,
+    TeamController,
   ],
   providers: [
     SessionService,
@@ -72,6 +75,7 @@ import { TeamsController } from './tasks/teams.controller';
     TasksService,
     TaskStreamService,
     AiService,
+    AiTeamService,
     AiToolsService,
     NetworkSyncService,
     DomainsService,
@@ -80,6 +84,7 @@ import { TeamsController } from './tasks/teams.controller';
     postbackQueueProvider(REDIS),
     networkSyncQueueProvider(REDIS),
     notifyQueueProvider(REDIS),
+    aiTeamQueueProvider(REDIS),
     // Urutan guard: rate limit → autentikasi → permission
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useExisting: AuthGuard },
