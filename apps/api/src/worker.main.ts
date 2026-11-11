@@ -10,6 +10,10 @@ import { aiTeamQueueProvider, networkSyncQueueProvider, notifyQueueProvider, pos
 import { AiService } from './ai/ai.service';
 import { AiToolsService } from './ai/ai-tools';
 import { AiTeamService } from './ai/team.service';
+import { TeamMemoryService } from './ai/team-memory.service';
+import { ChatNotifier } from './chat/chat-notifier.service';
+import { ChatCommandService } from './chat/chat-command.service';
+import { TelegramPoller } from './chat/telegram-poller.service';
 import { AnalyticsService } from './reports/analytics.service';
 import { NetworkSyncService } from './networks/network-sync.service';
 import { DeliveryService } from './postbacks/delivery.service';
@@ -31,6 +35,10 @@ import { dnsResolverProvider } from './domains/resolver.provider';
     AiService,
     AiToolsService,
     AiTeamService,
+    TeamMemoryService,
+    ChatNotifier,
+    ChatCommandService,
+    TelegramPoller,
     DomainsService,
     dnsResolverProvider,
     WorkerService,

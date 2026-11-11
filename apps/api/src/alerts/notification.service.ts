@@ -5,6 +5,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { ENV, Env } from '../config/env';
 import { severityAtLeast } from './alert.service';
 import { formatAlert, sendTelegram, TelegramError } from './telegram';
+import { ChatNotifier } from '../chat/chat-notifier.service';
 
 /** Dijalankan worker: kirim satu alert ke semua channel aktif yang memenuhi severity minimum. */
 @Injectable()
@@ -15,13 +16,15 @@ export class NotificationService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     @Inject(ENV) private readonly env: Env,
+    private readonly chat: ChatNotifier,
   ) {}
 
   async deliver(alertId: string, onlyChannelId?: string): Promise<void> {
     const alert = await this.prisma.alert.findUnique({ where: { id: alertId }, include: { organization: { select: { name: true } } } });
     if (!alert) throw new UnrecoverableError('alert tidak ditemukan');
     const channels = await this.prisma.notificationChannel.findMany({
-      where: { organizationId: alert.organizationId, enabled: true, ...(onlyChannelId ? { id: onlyChannelId } : {}) },
+      // Hanya platform chat aktif organisasi (Telegram atau Discord); uji kirim boleh ke channel mana pun.
+      where: { organizationId: alert.organizationId, enabled: true, ...(onlyChannelId ? { id: onlyChannelId } : { type: (await this.chat.activePlatform(alert.organizationId)).platform }) },
     });
 
     let retryable: Error | null = null;
@@ -34,8 +37,14 @@ export class NotificationService {
       });
       if (delivery.status === 'SENT' && !onlyChannelId) continue;
       try {
-        const token = this.crypto.decrypt(ch.secretEnc);
-        await sendTelegram(this.env.TELEGRAM_API_BASE, token, ch.target, formatAlert(alert, alert.organization.name));
+        if (ch.type === 'DISCORD') {
+          await this.chat.send(ch, `**${alert.severity}** · ${alert.organization.name}
+**${alert.title}**
+${alert.body}`);
+        } else {
+          const token = this.crypto.decrypt(ch.secretEnc);
+          await sendTelegram(this.env.TELEGRAM_API_BASE, token, ch.target, formatAlert(alert, alert.organization.name));
+        }
         await this.prisma.notificationDelivery.update({
           where: { id: delivery.id },
           data: { status: 'SENT', sentAt: new Date(), error: null, attempts: { increment: 1 } },

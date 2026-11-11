@@ -9,7 +9,7 @@ import { loadEnv } from './config/env';
 
 async function bootstrap() {
   const env = loadEnv();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(Logger));
   applyHttpSetup(app, env);
   app.setGlobalPrefix('api/v1');

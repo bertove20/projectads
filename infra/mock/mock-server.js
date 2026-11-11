@@ -10,6 +10,9 @@ const http = require('http');
 
 const VALID_TOKEN = 'test-roller-token';
 const received = [];
+/** Antrean update Telegram per token (diisi test lewat POST /_telegram/updates). */
+const tgUpdates = {};
+let tgUpdateId = 1000;
 let statsRequests = 0;
 
 const OR_KEY = 'sk-or-v1-mock-valid-key-000000000000';
@@ -45,6 +48,32 @@ http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://mock');
     if (url.pathname === '/_received') return json(res, 200, { received, statsRequests });
+    if (url.pathname === '/_telegram/updates' && req.method === 'POST') {
+      // { token, chatId, chatType, fromId, username, text } → update untuk getUpdates
+      const b = JSON.parse((await readBody(req)) || '{}');
+      const id = ++tgUpdateId;
+      const from = { id: b.fromId, is_bot: false, username: b.username, first_name: b.username };
+      const chat = { id: Number(b.chatId), type: b.chatType ?? 'supergroup' };
+      (tgUpdates[b.token] ??= []).push(
+        b.callbackData
+          ? { update_id: id, callback_query: { id: 'cb' + id, from, chat_instance: 'ci', message: { message_id: b.messageId ?? id, chat }, data: b.callbackData } }
+          : { update_id: id, message: { message_id: id, from, chat, text: b.text } },
+      );
+      return json(res, 200, { ok: true, update_id: id });
+    }
+    if (url.pathname.startsWith('/discord/api/v10/')) {
+      const p = url.pathname.slice('/discord/api/v10'.length);
+      const body = await readBody(req);
+      let parsed = {};
+      try { parsed = JSON.parse(body || '{}'); } catch {}
+      received.push({ at: new Date().toISOString(), kind: 'discord', method: req.method, path: p.replace(/\/webhooks\/(\d+)\/[^/]+/, '/webhooks/$1/[token]'), auth: req.headers.authorization ? 'present' : 'none', body: parsed });
+      if (/^\/webhooks\/\d+\/[\w-]+$/.test(p) && req.method === 'POST') { res.writeHead(204); return res.end(); }
+      if (/^\/applications\/\d+\/guilds\/\d+\/commands$/.test(p) && req.method === 'PUT') {
+        if (req.headers.authorization !== 'Bot mock-discord-bot-token-0000000000000000000000000000000000000000000000') return json(res, 401, { message: '401: Unauthorized', code: 0 });
+        return json(res, 200, (Array.isArray(parsed) ? parsed : []).map((c, i) => ({ id: String(900 + i), ...c })));
+      }
+      return json(res, 404, { message: 'Unknown', code: 0 });
+    }
 
     if (url.pathname.startsWith('/v2/')) {
       if (req.headers['x-access-token'] !== VALID_TOKEN) return json(res, 401, { error: { code: 401, message: 'Unauthorized' } });
@@ -146,12 +175,20 @@ http
               proposals.push({ action: 'CREATE_TASK', title: 'Siapkan creative baru', reason: 'CTR turun 30% minggu ini', evidence: ['E999'] });
               questions.push({ to: 'FRAUD_ANALYST', question: 'Apakah ada zone dengan bot tinggi?' });
             } else if (sys.includes('jabatan Fraud Analyst')) {
-              if (cid) proposals.push({ action: 'ZONE_LIST', title: 'Blokir zone 5552', reason: 'Bot 70% dan 0 konversi 7 hari', evidence: evid.slice(0, 1), risk: 'LOW', campaignId: cid, zoneId: '5552', listType: 'BLACKLIST' });
+              if (cid) proposals.push({ action: 'ZONE_LIST', title: 'Blokir zone 5552', reason: 'Traffic bot tinggi dan tidak ada konversi 7 hari', evidence: evid.slice(0, 1), risk: 'LOW', campaignId: cid, zoneId: '5552', listType: 'BLACKLIST' });
+              proposals.push({ action: 'CREATE_TASK', title: 'Audit zone bot', reason: 'Bot rate zone 7781 mencapai 83.4% minggu ini', evidence: evid.slice(0, 1) });
             } else if (sys.includes('jabatan Tracking Specialist')) {
               proposals.push({ action: 'CAMPAIGN_STATUS', title: 'Aktifkan campaign', reason: 'tracking sudah sehat semua', evidence: evid.slice(0, 1), campaignId: cid, status: 'ACTIVE' });
               proposals.push({ action: 'CREATE_TASK', title: 'Uji ulang postback affiliate', reason: 'Ada postback keluar gagal 7 hari terakhir', evidence: evid.slice(0, 1), priority: 'HIGH' });
             }
-            return call('submit_report', { summary: 'Laporan berbasis data ' + evid.join(','), findings: [{ text: 'Data diperiksa', evidence: evid.slice(0, 1) }, { text: 'Klaim tanpa bukti', evidence: ['E777'] }], proposals, questions });
+            const memory = sys.includes('# Ingatan kerja') ? 'ingat' : 'baru';
+            return call('submit_report', {
+              summary: 'Laporan berbasis data ' + evid.join(',') + ' (' + memory + ')',
+              findings: [{ text: 'Data diperiksa', evidence: evid.slice(0, 1) }, { text: 'Klaim tanpa bukti', evidence: ['E777'] }, { text: 'CPA naik ke $987.65', evidence: evid.slice(0, 1) }],
+              lessons: sys.includes('jabatan Media Buyer') ? [{ text: 'Selalu cek daftar campaign sebelum mengusulkan pause', evidence: evid.slice(0, 1) }] : [],
+              proposals,
+              questions,
+            });
           }
           if (submit === 'submit_discussion') {
             const q = (all.match(/Q\d+ dari/g) ?? []).map((x) => x.split(' ')[0]);
@@ -186,12 +223,27 @@ http
       const body = await readBody(req);
       const token = url.pathname.split('/')[2].slice(3);
       if (!token.startsWith('123456:')) return json(res, 401, { ok: false, description: 'Unauthorized' });
+      const method = url.pathname.split('/')[3];
+      if (method === 'getMe') return json(res, 200, { ok: true, result: { id: 123456, is_bot: true, first_name: 'EAIP', username: 'EaipMockBot' } });
+      if (method === 'answerCallbackQuery') {
+        let q = {};
+        try { q = JSON.parse(body || '{}'); } catch {}
+        received.push({ at: new Date().toISOString(), kind: 'telegram-answer', id: q.callback_query_id, text: q.text });
+        return json(res, 200, { ok: true, result: true });
+      }
+      if (method === 'getUpdates') {
+        let q = {};
+        try { q = JSON.parse(body || '{}'); } catch {}
+        const list = (tgUpdates[token] ?? []).filter((u) => q.offset == null || u.update_id >= q.offset);
+        tgUpdates[token] = list; // offset mengonfirmasi update sebelumnya
+        return json(res, 200, { ok: true, result: list.slice(0, 100) });
+      }
       let parsed = {};
       try {
         parsed = JSON.parse(body);
       } catch {}
-      received.push({ at: new Date().toISOString(), kind: 'telegram', chat_id: parsed.chat_id, text: parsed.text });
-      return json(res, 200, { ok: true, result: { message_id: received.length } });
+      received.push({ at: new Date().toISOString(), kind: 'telegram', chat_id: parsed.chat_id, text: parsed.text, replyTo: parsed.reply_parameters?.message_id ?? null, buttons: parsed.reply_markup?.inline_keyboard ?? null, messageId: received.length + 50000 });
+      return json(res, 200, { ok: true, result: { message_id: received.length + 50000 } });
     }
 
     received.push({ at: new Date().toISOString(), kind: 'postback', url: req.url });

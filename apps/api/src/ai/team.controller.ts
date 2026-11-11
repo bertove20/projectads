@@ -11,6 +11,7 @@ import { periodStarts } from './ai-core';
 import { POSITION_LABEL } from './ai.service';
 import { ACTION_LABEL, ACTION_RULES, SUPERVISOR_KEY } from './team-core';
 import { AiTeamService, OwnerDecision } from './team.service';
+import { TeamMemoryService } from './team-memory.service';
 
 class TeamSettingsDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
@@ -18,6 +19,9 @@ class TeamSettingsDto {
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) meetingTime?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsNumber() @Min(0) @Max(100_000) dailyBudgetUsd?: number | null;
   @IsOptional() @IsNumber() @Min(0.01) @Max(1000) runBudgetUsd?: number;
+  /** Hanya satu platform chat aktif */
+  @IsOptional() @IsIn(['TELEGRAM', 'DISCORD']) chatPlatform?: 'TELEGRAM' | 'DISCORD';
+  @IsOptional() @IsBoolean() chatApprovals?: boolean;
 }
 class StopDto {
   @IsBoolean() paused: boolean;
@@ -46,6 +50,14 @@ class GoalPatchDto {
 class DirectiveDto {
   @IsString() @Length(5, 4000) text: string;
 }
+class MemoryDto {
+  @IsOptional() @ValidateIf((_o, v) => v !== null) @IsUUID() agentId?: string | null;
+  @IsString() @Length(5, 1000) content: string;
+  @IsOptional() @IsBoolean() pinned?: boolean;
+}
+class PinDto {
+  @IsBoolean() pinned: boolean;
+}
 class DecideDto {
   @IsIn(['APPROVE', 'REJECT', 'REVISION']) decision: OwnerDecision;
   @IsOptional() @IsString() @Length(0, 2000) note?: string;
@@ -62,6 +74,7 @@ export class TeamController {
     private readonly prisma: PrismaService,
     private readonly team: AiTeamService,
     private readonly audit: AuditService,
+    private readonly memory: TeamMemoryService,
   ) {}
 
   // ───────────── tim ─────────────
@@ -140,6 +153,140 @@ export class TeamController {
     }
     const upd = await this.prisma.aiAgent.update({ where: { id }, data: { enabled: dto.enabled, modelId: dto.modelId, instructions: dto.instructions === undefined ? undefined : dto.instructions?.trim() || null } });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'ai.agent.update', entityType: 'ai_agent', entityId: id, before: { enabled: a.enabled, modelId: a.modelId, instructions: a.instructions }, after: { enabled: upd.enabled, modelId: upd.modelId, instructions: upd.instructions } });
+    return { ok: true };
+  }
+
+  // ───────────── status langsung (visual 3D) & chat kerja agent ─────────────
+
+  /**
+   * Status setiap karyawan AI saat ini, dihitung dari transkrip sesi yang berjalan:
+   * working = sedang mengambil data, talking = baru menulis laporan/diskusi, meeting = ikut sesi berjalan, idle, off.
+   */
+  @Get('team/live')
+  @RequirePermissions('ai.supervise')
+  async live(@Org() org: OrgContext) {
+    await this.team.ensureAgents(org.organizationId);
+    const [agents, running, settings] = await Promise.all([
+      this.prisma.aiAgent.findMany({ where: { organizationId: org.organizationId } }),
+      this.prisma.aiRun.findMany({ where: { organizationId: org.organizationId, status: { in: ['QUEUED', 'RUNNING'] } }, select: { id: true, title: true, stage: true, kind: true, status: true } }),
+      this.team.settings(org.organizationId),
+    ]);
+    const lastByAgent = await this.prisma.aiRunMessage.findMany({
+      where: { agentId: { in: agents.map((a) => a.id) }, run: { organizationId: org.organizationId } },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['agentId'],
+      select: { agentId: true, kind: true, content: true, toolName: true, createdAt: true, runId: true },
+    });
+    const last = new Map(lastByAgent.map((m) => [m.agentId, m]));
+    const runIds = new Set(running.map((r) => r.id));
+    const recentInRun = running.length
+      ? await this.prisma.aiRunMessage.findMany({ where: { runId: { in: [...runIds] } }, orderBy: { createdAt: 'desc' }, take: 1, select: { agentId: true } })
+      : [];
+    const participants = running.length
+      ? new Set((await this.prisma.aiRunMessage.findMany({ where: { runId: { in: [...runIds] }, agentId: { not: null } }, distinct: ['agentId'], select: { agentId: true } })).map((m) => m.agentId))
+      : new Set<string | null>();
+    const current = recentInRun[0]?.agentId ?? null;
+    const label: Record<string, string> = { REPORT: 'menulis laporan', DISCUSSION: 'berdiskusi', SUMMARY: 'merangkum untuk owner', PLAN: 'menyusun rencana', ASSIGNMENT: 'membagi tugas', NOTE: 'catatan sistem', ERROR: 'kendala' };
+    return {
+      paused: settings.paused,
+      running,
+      agents: agents.map((a) => {
+        const m = last.get(a.id);
+        const inRun = m && runIds.has(m.runId);
+        const state = !a.enabled ? 'off' : settings.paused ? 'paused' : a.id === current && inRun ? (m.kind === 'TOOL' ? 'working' : 'talking') : participants.has(a.id) || (a.role === 'SUPERVISOR' && running.length) ? 'meeting' : 'idle';
+        return {
+          id: a.id,
+          key: a.key,
+          name: a.name,
+          role: a.role,
+          position: a.position,
+          state,
+          activity: m ? (m.kind === 'TOOL' ? `mengambil data ${m.toolName ?? ''}`.trim() : (label[m.kind] ?? m.kind.toLowerCase())) : null,
+          snippet: m && m.kind !== 'TOOL' ? m.content.replace(/[#*`_>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 140) : null,
+          lastActiveAt: m?.createdAt ?? null,
+          runId: m?.runId ?? null,
+        };
+      }),
+    };
+  }
+
+  /** Feed bergaya chat: pekerjaan seorang agent (atau semua) lintas sesi, terbaru di bawah. */
+  @Get('team/feed')
+  @RequirePermissions('ai.supervise')
+  async feed(@Org() org: OrgContext, @Query('agentId') agentId?: string, @Query('before') before?: string) {
+    const valid = agentId && /^[0-9a-f-]{36}$/i.test(agentId) ? agentId : null;
+    const beforeDate = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : null;
+    const where: Prisma.AiRunMessageWhereInput = {
+      run: { organizationId: org.organizationId },
+      ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}),
+      ...(valid ? { OR: [{ agentId: valid }, { kind: 'ASSIGNMENT', data: { path: ['to'], equals: valid } }, { kind: 'DIRECTIVE' }] } : {}),
+    };
+    const rows = await this.prisma.aiRunMessage.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 80,
+      select: { id: true, runId: true, agentId: true, authorId: true, kind: true, stage: true, content: true, toolName: true, evidenceId: true, createdAt: true, data: true, run: { select: { title: true, kind: true } } },
+    });
+    const authors = await this.prisma.user.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.authorId).filter((x): x is string => !!x))] } }, select: { id: true, name: true } });
+    const names = new Map(authors.map((a) => [a.id, a.name]));
+    return rows.reverse().map((r) => ({
+      ...r,
+      // Data tool lengkap dibuka lewat endpoint bukti; feed hanya membawa label.
+      data: r.kind === 'TOOL' ? null : r.data,
+      authorName: r.authorId ? (names.get(r.authorId) ?? null) : null,
+      via: (r.data as { via?: string } | null)?.via ?? null,
+    }));
+  }
+
+  @Get('team/agents/:id')
+  @RequirePermissions('ai.supervise')
+  async agent(@Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string) {
+    const a = await this.prisma.aiAgent.findFirst({ where: { id, organizationId: org.organizationId }, include: { model: { select: { modelId: true, name: true } } } });
+    if (!a) notFound('Agent');
+    const [memories, proposals, usage] = await Promise.all([
+      this.prisma.aiAgentMemory.findMany({ where: { organizationId: org.organizationId, OR: [{ agentId: id }, { agentId: null }] }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }], take: 100 }),
+      this.prisma.aiProposal.groupBy({ by: ['status'], where: { agentId: id }, _count: true }),
+      this.prisma.aiUsageLog.aggregate({ where: { agentId: id, createdAt: { gte: periodStarts().month } }, _sum: { costUsd: true }, _count: true }),
+    ]);
+    return {
+      id: a.id,
+      key: a.key,
+      name: a.name,
+      role: a.role,
+      position: a.position,
+      positionLabel: a.position ? POSITION_LABEL[a.position] : 'Atasan tim AI',
+      enabled: a.enabled,
+      allowedActions: a.position ? ACTION_RULES[a.position].map((x) => ({ key: x, label: ACTION_LABEL[x] })) : [],
+      proposals: Object.fromEntries(proposals.map((p) => [p.status, p._count])),
+      month: { requests: usage._count, costUsd: Number(usage._sum.costUsd ?? 0) },
+      memories,
+    };
+  }
+
+  @Post('team/memories')
+  @RequirePermissions('ai.supervise')
+  async addMemory(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Body() dto: MemoryDto) {
+    if (dto.agentId && !(await this.prisma.aiAgent.count({ where: { id: dto.agentId, organizationId: org.organizationId } }))) notFound('Agent');
+    const m = await this.memory.remember({ organizationId: org.organizationId, agentId: dto.agentId ?? null, kind: 'NOTE', content: dto.content.trim(), createdById: user.id, pinned: dto.pinned ?? true });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'ai.memory.create', entityType: 'ai_agent_memory', entityId: m.id, after: { agentId: m.agentId, content: m.content } });
+    return m;
+  }
+
+  @Patch('team/memories/:id')
+  @RequirePermissions('ai.supervise')
+  async pinMemory(@Org() org: OrgContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: PinDto) {
+    const r = await this.prisma.aiAgentMemory.updateMany({ where: { id, organizationId: org.organizationId }, data: { pinned: dto.pinned } });
+    if (!r.count) notFound('Ingatan');
+    return { ok: true };
+  }
+
+  @Delete('team/memories/:id')
+  @RequirePermissions('ai.supervise')
+  async deleteMemory(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    const m = await this.prisma.aiAgentMemory.findFirst({ where: { id, organizationId: org.organizationId } });
+    if (!m) notFound('Ingatan');
+    await this.prisma.aiAgentMemory.delete({ where: { id } });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: user.id, action: 'ai.memory.delete', entityType: 'ai_agent_memory', entityId: id, before: { content: m.content, kind: m.kind } });
     return { ok: true };
   }
 

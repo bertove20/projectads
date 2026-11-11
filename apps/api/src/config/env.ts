@@ -65,6 +65,9 @@ const schema = z.object({
   PROPELLERADS_API_BASE: z.string().url().default('https://ssp-api.propellerads.com/v5'),
   /** Base URL Telegram Bot API. Diubah hanya untuk mock lokal. */
   TELEGRAM_API_BASE: z.string().url().default('https://api.telegram.org'),
+  DISCORD_API_BASE: z.string().url().default('https://discord.com/api/v10'),
+  /** Long polling getUpdates Telegram (detik); 0 = short polling (uji lokal) */
+  TELEGRAM_POLL_TIMEOUT_SECONDS: z.coerce.number().int().min(0).max(50).default(25),
   OPENROUTER_API_BASE: z.string().url().default('https://openrouter.ai/api/v1'),
   /** Batas waktu satu request ke model (ms) */
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(300000).default(90000),

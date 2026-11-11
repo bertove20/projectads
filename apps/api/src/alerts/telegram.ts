@@ -20,14 +20,14 @@ export class TelegramError extends Error {
   }
 }
 
-export async function sendTelegram(apiBase: string, token: string, chatId: string, html: string): Promise<void> {
+export async function sendTelegram(apiBase: string, token: string, chatId: string, html: string, opts: { replyTo?: number; buttons?: { text: string; callback_data: string }[][] } = {}): Promise<void> {
   const url = `${apiBase.replace(/\/$/, '')}/bot${token}/sendMessage`;
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: html.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true }),
+      body: JSON.stringify({ chat_id: chatId, text: html.slice(0, 4000), parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...(opts.replyTo ? { reply_parameters: { message_id: opts.replyTo } } : {}), ...(opts.buttons?.length ? { reply_markup: { inline_keyboard: opts.buttons } } : {}) }),
       signal: AbortSignal.timeout(15_000),
       redirect: 'error',
     });

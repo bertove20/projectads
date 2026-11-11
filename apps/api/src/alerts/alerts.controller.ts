@@ -23,6 +23,8 @@ class UpdateChannelDto {
   @IsOptional() @Matches(TELEGRAM_TOKEN_RE) botToken?: string;
   @IsOptional() @IsEnum(Severity) minSeverity?: Severity;
   @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsBoolean() commandsEnabled?: boolean;
+  @IsOptional() @IsBoolean() teamUpdates?: boolean;
 }
 
 /**
@@ -34,7 +36,7 @@ function alertScope(org: OrgContext): Prisma.AlertWhereInput {
   return { OR: [{ entityType: { not: 'campaign' } }, { entityType: null }, { entityType: 'campaign', entityId: { in: org.campaignIds } }] };
 }
 
-const CHANNEL_SELECT = { id: true, type: true, name: true, target: true, secretHint: true, minSeverity: true, enabled: true, lastTestAt: true, createdAt: true } as const;
+const CHANNEL_SELECT = { id: true, type: true, name: true, target: true, secretHint: true, minSeverity: true, enabled: true, commandsEnabled: true, teamUpdates: true, config: true, lastTestAt: true, createdAt: true } as const;
 
 @ApiTags('alerts')
 @Controller()
@@ -113,6 +115,7 @@ export class AlertsController {
   async updateChannel(@Org() org: OrgContext, @CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateChannelDto) {
     const ch = await this.prisma.notificationChannel.findFirst({ where: { id, organizationId: org.organizationId } });
     if (!ch) notFound('Channel');
+    if (ch.type === 'DISCORD' && dto.target) throw new BadRequestException({ code: 'BAD_TARGET', message: 'Guild ID Discord tidak dapat diubah; buat channel baru' });
     const after = await this.prisma.notificationChannel.update({
       where: { id },
       data: {
@@ -120,7 +123,9 @@ export class AlertsController {
         target: dto.target,
         minSeverity: dto.minSeverity,
         enabled: dto.enabled,
-        ...(dto.botToken ? { secretEnc: this.crypto.encrypt(dto.botToken), secretHint: this.crypto.hint(dto.botToken) } : {}),
+        commandsEnabled: dto.commandsEnabled,
+        teamUpdates: dto.teamUpdates,
+        ...(dto.botToken && ch.type === 'TELEGRAM' ? { secretEnc: this.crypto.encrypt(dto.botToken), secretHint: this.crypto.hint(dto.botToken) } : {}),
       },
       select: CHANNEL_SELECT,
     });

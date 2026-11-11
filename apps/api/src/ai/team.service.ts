@@ -15,6 +15,8 @@ import { AiToolsService } from './ai-tools';
 import { AiService, POSITION_LABEL } from './ai.service';
 import { AGENT_NAME } from './builtin-skills';
 import type { OrMessage, OrTool } from './openrouter.client';
+import { TeamMemoryService } from './team-memory.service';
+import { ChatNotifier, ChatOrigin } from '../chat/chat-notifier.service';
 import {
   ACTION_LABEL,
   ACTION_RULES,
@@ -57,6 +59,10 @@ interface RunState {
   org: OrgContext;
   evidence: number;
   known: Set<string>;
+  /** Data asli tiap bukti (untuk memeriksa angka yang ditulis agent) */
+  evidenceData: Map<string, unknown>;
+  /** Bukti yang diambil sendiri oleh tiap agent */
+  agentEvidence: Map<string, string[]>;
   campaignIds: Set<string>;
 }
 
@@ -88,6 +94,8 @@ export class AiTeamService {
     private readonly audit: AuditService,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(AI_TEAM_QUEUE) private readonly queue: Queue<AiTeamJob>,
+    private readonly memory: TeamMemoryService,
+    private readonly notifier: ChatNotifier,
   ) {}
 
   // ───────────── pengaturan & agent ─────────────
@@ -155,13 +163,20 @@ export class AiTeamService {
    * Rapat terjadwal: satu per hari (meetingDate unik). Rapat manual dari owner = rapat tambahan,
    * tidak mengunci jadwal harian (meetingDate null, tanggal tetap tercantum di judul).
    */
-  async startMeeting(organizationId: string, requestedById: string | null, manual: boolean) {
+  async startMeeting(organizationId: string, requestedById: string | null, manual: boolean, origin?: ChatOrigin) {
     await this.assertCanRun(organizationId);
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { timezone: true } });
     const date = dateInTz(new Date(), org.timezone);
     try {
       const run = await this.prisma.aiRun.create({
-        data: { organizationId, kind: 'MEETING', title: manual ? `Rapat tambahan ${date}` : `Rapat harian ${date}`, meetingDate: manual ? null : date, requestedById },
+        data: {
+          organizationId,
+          kind: 'MEETING',
+          title: manual ? `Rapat tambahan ${date}` : `Rapat harian ${date}`,
+          meetingDate: manual ? null : date,
+          requestedById,
+          origin: (origin ?? undefined) as Prisma.InputJsonValue | undefined,
+        },
       });
       await this.enqueue(run.id);
       return run;
@@ -172,15 +187,15 @@ export class AiTeamService {
     }
   }
 
-  async startDirective(organizationId: string, requestedById: string, directive: string, title?: string) {
+  async startDirective(organizationId: string, requestedById: string, directive: string, title?: string, origin?: ChatOrigin) {
     await this.assertCanRun(organizationId);
     const text = sanitizeText(directive, 4000).trim();
     if (text.length < 5) throw new UnprocessableEntityException({ code: 'DIRECTIVE_SHORT', message: 'Perintah terlalu pendek' });
     const t = sanitizeText(title ?? text, 200).replace(/\s+/g, ' ').trim();
     const run = await this.prisma.aiRun.create({
-      data: { organizationId, kind: 'DIRECTIVE', title: t.length > 80 ? `${t.slice(0, 77)}…` : t, directive: text, requestedById },
+      data: { organizationId, kind: 'DIRECTIVE', title: t.length > 80 ? `${t.slice(0, 77)}…` : t, directive: text, requestedById, origin: (origin ?? undefined) as Prisma.InputJsonValue | undefined },
     });
-    await this.prisma.aiRunMessage.create({ data: { runId: run.id, authorId: requestedById, kind: 'DIRECTIVE', content: text } });
+    await this.prisma.aiRunMessage.create({ data: { runId: run.id, authorId: requestedById, kind: 'DIRECTIVE', content: text, data: origin ? { via: origin.platform } : undefined } });
     await this.enqueue(run.id);
     return run;
   }
@@ -226,9 +241,14 @@ export class AiTeamService {
       org: this.agentOrg(run.organizationId),
       evidence: 0,
       known: new Set(),
+      evidenceData: new Map(),
+      agentEvidence: new Map(),
       campaignIds: new Set(campaigns.map((c) => c.id)),
     };
     try {
+      // Hasil nyata keputusan sebelumnya dihitung dulu agar menjadi ingatan untuk sesi ini.
+      const evaluated = await this.memory.evaluateOutcomes(run.organizationId, run.organization.timezone).catch(() => 0);
+      if (evaluated) await this.note(state, null, 'NOTE', `${evaluated} hasil keputusan sebelumnya dievaluasi dari data dan disimpan ke ingatan tim.`, { stage: 'report' });
       if (run.kind === 'MEETING') await this.meeting(state);
       else await this.directive(state, run.directive ?? '');
       await this.prisma.aiRun.update({ where: { id: runId }, data: { status: 'COMPLETED', stage: 'done', finishedAt: new Date(), costUsd: await this.runCost(runId) } });
@@ -239,6 +259,8 @@ export class AiTeamService {
       await this.note(state, null, 'ERROR', stopped ? `Sesi dihentikan: ${message}` : `Sesi gagal: ${sanitizeText(message, 500)}`);
       await this.prisma.aiRun.update({ where: { id: runId }, data: { status: stopped ? 'CANCELLED' : 'FAILED', error: sanitizeText(message, 500), finishedAt: new Date(), costUsd: await this.runCost(runId) } });
     }
+    const cards = await this.approvalCards(run.organizationId, runId).catch(() => []);
+    await this.notifier.runFinished(runId, cards).catch((err: unknown) => this.logger.warn({ runId, err: String(err) }, 'Kabar sesi ke chat gagal'));
   }
 
   private async runCost(runId: string) {
@@ -273,7 +295,7 @@ export class AiTeamService {
     };
   }
 
-  private systemPrompt(state: RunState, agent: AiAgent, skills: { key: string; name: string; version: number; body: string }[]) {
+  private systemPrompt(state: RunState, agent: AiAgent, skills: { key: string; name: string; version: number; body: string }[], memory: string) {
     const role =
       agent.role === 'SUPERVISOR'
         ? `Anda adalah ${SUPERVISOR_NAME}, atasan seluruh karyawan AI di organisasi "${sanitizeText(state.orgName, 80)}". Anda melapor langsung ke owner (manusia). Tugas Anda: membagi pekerjaan, memeriksa laporan bawahan dengan data, menolak usulan yang lemah, dan meneruskan usulan yang layak ke owner dengan rangkuman yang jujur.`
@@ -291,6 +313,9 @@ export class AiTeamService {
       '5. Revenue dan konversi hanya status VERIFIED dari postback. Selalu sebut periode data.',
       '6. Kejar goal yang ditetapkan owner (tool goal_progress). Jangan mengulang usulan yang sudah ditolak tanpa data baru (tool recent_decisions).',
       '7. Bila data tidak cukup, katakan dengan jujur; jangan mengarang.',
+      '8. Sistem mencocokkan SETIAP angka yang Anda tulis dengan data bukti yang Anda rujuk. Angka yang tidak ada di bukti (termasuk hasil hitungan sendiri) membuat temuan dibuang dan usulan ditolak. Kutip angka persis seperti di data.',
+      '9. Belajar dari ingatan kerja di bawah: hasil nyata keputusan sebelumnya dan alasan penolakan owner/Kepala Tim. Bila ada pelajaran baru yang didukung data, catat di "lessons".',
+      ...(memory ? ['', memory] : []),
       ...(agent.instructions ? ['', '# Instruksi tambahan dari owner', sanitizeText(agent.instructions, 2000)] : []),
       ...(skills.length ? ['', '# Skill jabatan', ...skills.map((s) => `\n## Skill: ${s.name} [${s.key} v${s.version}]\n${s.body}`)] : []),
     ].join('\n');
@@ -312,7 +337,7 @@ export class AiTeamService {
     const submitName = opts.submit.function.name;
     const client = await this.ai.client(state.organizationId);
     const messages: OrMessage[] = [
-      { role: 'system', content: this.systemPrompt(state, agent, skills) },
+      { role: 'system', content: this.systemPrompt(state, agent, skills, await this.memory.promptBlock(state.organizationId, agent)) },
       { role: 'user', content: `${opts.task}\n\nKumpulkan data dengan tool yang tersedia, lalu panggil ${submitName} tepat satu kali.` },
     ];
     const check = this.budgetCheck(state);
@@ -358,6 +383,8 @@ export class AiTeamService {
         if (out.ok) {
           evidenceId = `E${++state.evidence}`;
           state.known.add(evidenceId);
+          state.evidenceData.set(evidenceId, out.result);
+          state.agentEvidence.set(agent.id, [...(state.agentEvidence.get(agent.id) ?? []), evidenceId]);
         }
         let args = {};
         try {
@@ -405,10 +432,28 @@ export class AiTeamService {
       const allowed = ACTION_RULES[agent.position!];
       const raw = await this.runAgent(state, agent, { stage, task, submit: submitReportTool(ALL_POSITIONS, allowed) });
       if (!raw) continue;
-      const report = parseReport(raw, { allowed, known: state.known, positions: ALL_POSITIONS, self: agent.position! });
-      await this.note(state, agent.id, 'REPORT', this.renderReport(report), { stage, data: { findings: report.findings, questions: report.questions } as Prisma.InputJsonValue, modelId: String(raw.__modelId ?? '') || null });
+      const report = parseReport(raw, {
+        allowed,
+        known: state.known,
+        positions: ALL_POSITIONS,
+        self: agent.position!,
+        evidenceData: state.evidenceData,
+        ownEvidence: state.agentEvidence.get(agent.id) ?? [],
+      });
+      await this.note(state, agent.id, 'REPORT', this.renderReport(report), {
+        stage,
+        data: { findings: report.findings, questions: report.questions, lessons: report.lessons, unverified: report.unverified } as Prisma.InputJsonValue,
+        modelId: String(raw.__modelId ?? '') || null,
+      });
+      for (const u of report.unverified) {
+        await this.note(state, agent.id, 'NOTE', `Sistem menandai teks ${agent.name}: angka ${u.numbers.join(', ')} tidak ada di data bukti — "${sanitizeText(u.text, 160)}".`, { stage, data: { unverified: true } });
+      }
       for (const v of report.violations) {
         await this.note(state, agent.id, 'NOTE', `Usulan "${v.title}" ditolak sistem: ${v.reason}.`, { stage, data: { violation: true } });
+        await this.memory.remember({ organizationId: state.organizationId, agentId: agent.id, kind: 'FEEDBACK', content: `Usulan "${v.title}" ditolak sistem: ${v.reason}. Sertakan bukti dan angka persis dari data.`, runId: state.runId });
+      }
+      for (const l of report.lessons) {
+        await this.memory.remember({ organizationId: state.organizationId, agentId: agent.id, kind: 'LESSON', content: l.text, runId: state.runId, evidence: { ids: l.evidence } });
       }
       for (const p of report.proposals) {
         if (p.campaignId && !state.campaignIds.has(p.campaignId)) {
@@ -485,7 +530,8 @@ export class AiTeamService {
       ].join('\n');
       const raw = await this.runAgent(state, agent, { stage: 'discussion', task, submit: SUBMIT_DISCUSSION_TOOL });
       if (!raw) continue;
-      const d = parseDiscussion(raw, state.known, new Set(mine.map((q) => q.ref)), new Set(others.map((p) => p.ref)));
+      const d = parseDiscussion(raw, state.known, new Set(mine.map((q) => q.ref)), new Set(others.map((p) => p.ref)), state.evidenceData);
+      if (d.dropped) await this.note(state, agent.id, 'NOTE', `${d.dropped} tanggapan ${agent.name} dibuang sistem: memuat angka yang tidak ada di data bukti.`, { stage: 'discussion', data: { unverified: true } });
       const lines = [
         ...d.answers.map((a) => `- Jawaban ${a.questionRef}: ${a.text}${a.evidence.length ? ` (bukti ${a.evidence.join(', ')})` : ''}`),
         ...d.reviews.map((r) => `- ${r.stance === 'SUPPORT' ? 'Mendukung' : r.stance === 'OBJECT' ? 'Keberatan' : 'Info'} ${r.proposalRef}: ${r.text}${r.evidence.length ? ` (bukti ${r.evidence.join(', ')})` : ''}`),
@@ -525,14 +571,32 @@ export class AiTeamService {
       await this.prisma.aiRun.update({ where: { id: state.runId }, data: { summary: 'Kepala Tim AI gagal menyusun rangkuman. Lihat transkrip untuk laporan masing-masing agent.' } });
       return;
     }
-    const s = parseSummary(raw, { proposalRefs: new Set(rows.map((p) => p.ref)), campaignIds: state.campaignIds, goalIds: goals.ids, known: state.known });
+    const goalTargets = (await this.prisma.aiGoal.findMany({ where: { organizationId: state.organizationId, active: true }, select: { target: true } })).flatMap((g) => [Number(g.target), Number(g.target) * 100]);
+    const s = parseSummary(raw, {
+      proposalRefs: new Set(rows.map((p) => p.ref)),
+      campaignIds: state.campaignIds,
+      goalIds: goals.ids,
+      known: state.known,
+      evidenceData: state.evidenceData,
+      // Angka konteks yang sah disebut: jumlah laporan/usulan/pelanggaran, target goal.
+      contextNumbers: [reports.length, rows.length, violations, ...goalTargets, ...[...Array(rows.length + 1).keys()]],
+    });
     for (const p of rows) {
       const d = s.decisions.get(p.ref);
       const status = d?.decision === 'FORWARD' ? 'PENDING_OWNER' : d?.decision === 'REJECT' ? 'SUPERVISOR_REJECTED' : 'DRAFT';
       await this.prisma.aiProposal.update({ where: { id: p.id }, data: { status, supervisorNote: d ? `${d.decision === 'HOLD' ? 'Ditunda: ' : ''}${d.note}` : 'Belum dinilai Kepala Tim AI' } });
+      if (d && d.decision !== 'FORWARD') {
+        await this.memory.remember({ organizationId: state.organizationId, agentId: p.agentId, kind: 'FEEDBACK', content: `${SUPERVISOR_NAME} ${d.decision === 'REJECT' ? 'menolak' : 'menunda'} usulan "${p.title}": ${d.note}`, runId: state.runId, proposalId: p.id });
+      }
+    }
+    for (const l of s.teamLessons) {
+      await this.memory.remember({ organizationId: state.organizationId, agentId: null, kind: 'LESSON', content: l.text, runId: state.runId, evidence: { ids: l.evidence } });
+    }
+    if (s.unverifiedNumbers.length) {
+      await this.note(state, supervisor.id, 'NOTE', `Sistem menandai rangkuman: angka ${s.unverifiedNumbers.join(', ')} tidak ditemukan di data bukti sesi ini. Periksa sebelum mengambil keputusan.`, { stage: 'summary', data: { unverified: true } });
     }
     const counts = { forwarded: [...s.decisions.values()].filter((d) => d.decision === 'FORWARD').length, rejected: [...s.decisions.values()].filter((d) => d.decision === 'REJECT').length, proposals: rows.length, violations };
-    const brief = { campaignEvaluations: s.campaignEvaluations, goals: s.goals, counts };
+    const brief = { campaignEvaluations: s.campaignEvaluations, goals: s.goals, counts, unverifiedNumbers: s.unverifiedNumbers, lessons: s.teamLessons };
     await this.note(state, supervisor.id, 'SUMMARY', s.summary, { stage: 'summary', data: brief as unknown as Prisma.InputJsonValue, modelId: String(raw.__modelId ?? '') || null });
     await this.prisma.aiRun.update({ where: { id: state.runId }, data: { summary: s.summary, brief: brief as unknown as Prisma.InputJsonValue } });
   }
@@ -603,6 +667,34 @@ export class AiTeamService {
 
   // ───────────── keputusan owner & eksekusi ─────────────
 
+  /** Kartu usulan menunggu owner untuk chat (teks + tombol setujui/tolak). */
+  async approvalCards(organizationId: string, runId?: string) {
+    const rows = await this.prisma.aiProposal.findMany({
+      where: { organizationId, status: 'PENDING_OWNER', ...(runId ? { runId } : {}) },
+      include: { agent: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    const fmt = (v: unknown) => (v == null ? 'tidak ada' : v === 'ACTIVE' ? 'Aktif' : v === 'PAUSED' ? 'Dijeda' : v === 'BLACKLIST' ? 'Diblokir' : v === 'WHITELIST' ? 'Diizinkan' : String(v));
+    const out = [];
+    for (const p of rows) {
+      const pv = (await this.preview(p)) as { campaign?: string | null; before?: unknown; after?: unknown; zoneId?: unknown };
+      const preview = p.action === 'CREATE_TASK' ? 'kartu tugas baru di board' : `${pv.campaign ?? 'campaign'}${p.action === 'ZONE_LIST' ? ` zone ${String(pv.zoneId)}` : ''}: ${fmt(pv.before)} → ${fmt(pv.after)}`;
+      out.push({
+        id: p.id,
+        ref: p.ref,
+        text: this.notifier.proposalCard({ id: p.id, ref: p.ref, title: p.title, reason: p.reason, risk: p.risk, actionLabel: ACTION_LABEL[p.action], agentName: p.agent.name, supervisorNote: p.supervisorNote, preview }),
+        buttons: [
+          [
+            { label: `✅ Setujui ${p.ref}`, data: `ap:${p.id}`, style: 'success' as const },
+            { label: `❌ Tolak ${p.ref}`, data: `rj:${p.id}`, style: 'danger' as const },
+          ],
+        ],
+      });
+    }
+    return out;
+  }
+
   /** Pratinjau sebelum–sesudah untuk ditampilkan di Approval Center. */
   async preview(p: Pick<AiProposal, 'organizationId' | 'action' | 'campaignId' | 'payload'>) {
     const payload = p.payload as Record<string, unknown>;
@@ -631,6 +723,17 @@ export class AiTeamService {
     const upd = await this.prisma.aiProposal.updateMany({ where: { id: p.id, status: 'PENDING_OWNER' }, data: { status, ownerNote: cleanNote, decidedById: userId, decidedAt: new Date() } });
     if (!upd.count) throw new ConflictException({ code: 'PROPOSAL_DECIDED', message: 'Usulan sudah diputuskan' });
     await this.audit.log({ organizationId: org.organizationId, actorUserId: userId, action: `ai.proposal.${status.toLowerCase()}`, entityType: 'ai_proposal', entityId: p.id, after: { ref: p.ref, action: p.action, title: p.title, note: cleanNote } });
+    // Keputusan owner menjadi ingatan agent pengusul (dan dasar belajar sesi berikutnya).
+    const verb = decision === 'APPROVE' ? 'menyetujui' : decision === 'REJECT' ? 'menolak' : 'meminta revisi';
+    await this.memory.remember({
+      organizationId: org.organizationId,
+      agentId: p.agentId,
+      kind: 'FEEDBACK',
+      content: `Owner ${verb} usulan "${p.title}" (${p.ref}, ${p.run.title})${cleanNote ? `: ${cleanNote}` : '.'}`,
+      runId: p.runId,
+      proposalId: p.id,
+      createdById: userId,
+    });
 
     if (decision === 'REVISION') {
       const run = await this.startDirective(
@@ -655,6 +758,16 @@ export class AiTeamService {
       else if (p.action === 'ZONE_LIST') result = await this.execZone(org, userId, p, String(payload.zoneId), String(payload.listType) as 'BLACKLIST' | 'WHITELIST');
       else result = await this.execTask(org, userId, p, payload);
       await this.prisma.aiProposal.update({ where: { id: p.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: result as Prisma.InputJsonValue } });
+      if (p.action !== 'CREATE_TASK') {
+        await this.memory.remember({
+          organizationId: org.organizationId,
+          agentId: p.agentId,
+          kind: 'OUTCOME',
+          content: `Usulan "${p.title}" dieksekusi: ${String(result.before ?? 'tidak ada')} → ${String(result.after)}${result.noop ? ' (sudah sesuai, tanpa perubahan)' : ''}. Dampaknya akan dievaluasi dari data setelah 2 hari.`,
+          runId: p.runId,
+          proposalId: p.id,
+        });
+      }
       return { status: 'EXECUTED', result };
     } catch (err) {
       const message = (err as { response?: { message?: string } })?.response?.message ?? (err instanceof Error ? err.message : String(err));
@@ -709,7 +822,7 @@ export class AiTeamService {
   }
 
   /** Tombol darurat: hentikan semua sesi berjalan dan blokir eksekusi. */
-  async setPaused(org: OrgContext, userId: string, paused: boolean) {
+  async setPaused(org: Pick<OrgContext, 'organizationId'>, userId: string, paused: boolean, via?: string) {
     const s = await this.prisma.aiTeamSettings.upsert({
       where: { organizationId: org.organizationId },
       create: { organizationId: org.organizationId, paused, pausedAt: paused ? new Date() : null, pausedById: paused ? userId : null },
@@ -718,7 +831,8 @@ export class AiTeamService {
     if (paused) {
       await this.prisma.aiRun.updateMany({ where: { organizationId: org.organizationId, status: 'QUEUED' }, data: { status: 'CANCELLED', error: 'Dihentikan tombol darurat', finishedAt: new Date() } });
     }
-    await this.audit.log({ organizationId: org.organizationId, actorUserId: userId, action: paused ? 'ai.team.emergency_stop' : 'ai.team.resume', entityType: 'ai_team', entityId: org.organizationId });
+    await this.audit.log({ organizationId: org.organizationId, actorUserId: userId, action: paused ? 'ai.team.emergency_stop' : 'ai.team.resume', entityType: 'ai_team', entityId: org.organizationId, after: via ? { via } : undefined });
+    await this.notifier.broadcast(org.organizationId, paused ? `⏹ **Tim AI dihentikan** (tombol darurat${via ? ` lewat ${via}` : ""}). Tidak ada sesi baru dan eksekusi diblokir.` : `▶️ **Tim AI dilanjutkan**${via ? ` lewat ${via}` : ""}.`).catch(() => undefined);
     return s;
   }
 

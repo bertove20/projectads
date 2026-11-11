@@ -98,3 +98,40 @@ describe('goal & jadwal', () => {
     expect(meetingDue('09:00', '15:30', true)).toBe(false);
   });
 });
+
+import { evidenceNumbers, numbersIn, unsupportedNumbers } from './team-core';
+
+describe('anti-halusinasi: angka harus ada di bukti', () => {
+  const data = { rows: [{ clicks: 1234, cr: 0.0303, spend: 41.5, profit: -12.25, roi: -0.42 }], totals: { conversions: 7 } };
+  const pool = evidenceNumbers(data);
+
+  it('angka yang ada di data lolos (termasuk rasio → persen, tanda rugi, ribuan)', () => {
+    expect(unsupportedNumbers('CR 3,03% dari 1.234 klik, spend $41.5, rugi $12.25, ROI -42%', pool)).toEqual([]);
+  });
+
+  it('angka karangan ditangkap', () => {
+    expect(unsupportedNumbers('CPA naik ke $987.65 dan CR 5%', pool)).toEqual(['987.65', '5']);
+  });
+
+  it('ID bukti, periode, tanggal, UUID, dan 0/1 tidak diperiksa', () => {
+    expect(numbersIn('bukti E12, 7 hari terakhir, 2026-11-10, P3, T-44, 0 konversi, 1 zone, campaign 11111111-2222-4333-8444-555555555555').map((n) => n.raw)).toEqual([]);
+  });
+
+  it('usulan dengan angka karangan ditolak, temuan dibuang', () => {
+    const evidenceData = new Map<string, unknown>([['E1', data]]);
+    const r = parseReport(
+      {
+        summary: 'Spend 41.5',
+        findings: [{ text: 'CR 3.03%', evidence: ['E1'] }, { text: 'Bot rate 70%', evidence: ['E1'] }],
+        proposals: [{ action: 'CREATE_TASK', title: 'Cek zone', reason: 'CPA $55 terlalu tinggi', evidence: ['E1'] }],
+        lessons: [{ text: 'Pause campaign ROI -42% menaikkan profit', evidence: ['E1'] }],
+      },
+      { ...ctxFor('MEDIA_BUYER', ['CREATE_TASK']), known: new Set(['E1']), evidenceData, ownEvidence: ['E1'] },
+    );
+    expect(r.findings.map((f) => f.text)).toEqual(['CR 3.03%']);
+    expect(r.proposals).toHaveLength(0);
+    expect(r.violations[0].reason).toMatch(/55/);
+    expect(r.lessons).toHaveLength(1);
+    expect(r.unverified[0].numbers).toEqual(['70']);
+  });
+});

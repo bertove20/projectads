@@ -31,6 +31,10 @@ import { AiToolsService } from './ai/ai-tools';
 import { AiService } from './ai/ai.service';
 import { AssistantController } from './ai/assistant.controller';
 import { TeamController } from './ai/team.controller';
+import { TeamMemoryService } from './ai/team-memory.service';
+import { ChatController } from './chat/chat.controller';
+import { ChatCommandService } from './chat/chat-command.service';
+import { ChatNotifier } from './chat/chat-notifier.service';
 import { AiTeamService } from './ai/team.service';
 import { SkillsController } from './ai/skills.controller';
 import { TaskStreamService } from './tasks/task-stream.service';
@@ -66,6 +70,7 @@ import { TeamsController } from './tasks/teams.controller';
     SkillsController,
     AssistantController,
     TeamController,
+    ChatController,
   ],
   providers: [
     SessionService,
@@ -76,6 +81,9 @@ import { TeamsController } from './tasks/teams.controller';
     TaskStreamService,
     AiService,
     AiTeamService,
+    TeamMemoryService,
+    ChatNotifier,
+    ChatCommandService,
     AiToolsService,
     NetworkSyncService,
     DomainsService,

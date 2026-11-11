@@ -11,6 +11,8 @@ x-mocks: &mocks
   OPENROUTER_API_BASE: http://mock-network:4900/openrouter/api/v1
   # Cek jadwal rapat Tim AI lebih sering agar bisa diuji (default produksi 300 detik)
   AI_TEAM_SCHEDULE_SECONDS: "10"
+  DISCORD_API_BASE: http://mock-network:4900/discord/api/v10
+  TELEGRAM_POLL_TIMEOUT_SECONDS: "0"
   RECON_MIN_CLICKS: "50"
   # DNS tiruan untuk menguji verifikasi domain kustom (tidak ada di VPS)
   DNS_TEST_OVERRIDES: '{"*.e2e-ok.example":"cname:localhost","*.e2e-bad.example":"cname:elsewhere.example"}'

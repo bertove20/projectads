@@ -34,7 +34,7 @@ export const SUPERVISOR_TOOLS = ['list_campaigns', 'campaign_performance', 'list
 /** Izin baca yang dipakai karyawan AI: cakupan seluruh organisasi, hanya baca. */
 export const AGENT_PERMISSIONS = ['org.read', 'campaigns.read', 'analytics.read', 'alerts.read', 'postbacks.read', 'tasks.read', 'networks.read'];
 
-export const LIMITS = { findings: 8, proposals: 3, questions: 2, answers: 4, reviews: 6, assignments: 4, evaluations: 15 };
+export const LIMITS = { lessons: 2, findings: 8, proposals: 3, questions: 2, answers: 4, reviews: 6, assignments: 4, evaluations: 15 };
 
 // ───────────── tool penutup (output terstruktur) ─────────────
 
@@ -76,6 +76,12 @@ export function submitReportTool(positions: Position[], allowed: ProposalAction[
               },
               required: ['action', 'title', 'reason', 'evidence'],
             },
+          },
+          lessons: {
+            type: 'array',
+            maxItems: LIMITS.lessons,
+            description: 'Pelajaran dari hasil kerja/ingatan sebelumnya yang perlu diingat untuk sesi berikutnya (dengan bukti)',
+            items: { type: 'object', properties: { text: { type: 'string' }, evidence: evidenceProp }, required: ['text', 'evidence'] },
           },
           questions: {
             type: 'array',
@@ -161,6 +167,12 @@ export const SUBMIT_SUMMARY_TOOL: OrTool = {
           type: 'array',
           items: { type: 'object', properties: { goalId: { type: 'string' }, status: { type: 'string', enum: ['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'NO_DATA'] }, note: { type: 'string' } }, required: ['goalId', 'status'] },
         },
+        teamLessons: {
+          type: 'array',
+          maxItems: 3,
+          description: 'Pelajaran untuk seluruh tim yang perlu diingat (dengan bukti), mis. dari hasil keputusan sebelumnya',
+          items: { type: 'object', properties: { text: { type: 'string' }, evidence: evidenceProp }, required: ['text', 'evidence'] },
+        },
         decisions: {
           type: 'array',
           items: {
@@ -208,14 +220,38 @@ export interface ParsedReport {
   findings: { text: string; campaignId: string | null; evidence: string[] }[];
   proposals: ProposalInput[];
   questions: { to: Position; question: string }[];
-  /** Usulan yang ditolak server (melanggar rule jabatan / tanpa bukti / data tidak lengkap) */
+  /** Usulan yang ditolak server (melanggar rule jabatan / tanpa bukti / data tidak lengkap / angka tidak ada di bukti) */
   violations: Violation[];
+  /** Pelajaran untuk diingat (dengan bukti) */
+  lessons: { text: string; evidence: string[] }[];
+  /** Teks yang dibuang/ditandai karena memuat angka yang tidak ada di data bukti */
+  unverified: { text: string; numbers: string[] }[];
+}
+
+/** Kumpulan angka dari bukti tertentu (atau semua bila ids null). */
+export function poolFor(evidenceData: Map<string, unknown> | undefined, ids: string[] | null): number[] | null {
+  if (!evidenceData) return null;
+  const pool: number[] = [];
+  for (const [id, data] of evidenceData) if (!ids || ids.includes(id)) evidenceNumbers(data, pool);
+  return pool;
 }
 
 /** Validasi laporan agent: rule jabatan, bukti wajib, parameter aksi lengkap. */
-export function parseReport(raw: unknown, ctx: { allowed: ProposalAction[]; known: Set<string>; positions: Position[]; self: Position }): ParsedReport {
+export function parseReport(
+  raw: unknown,
+  ctx: { allowed: ProposalAction[]; known: Set<string>; positions: Position[]; self: Position; evidenceData?: Map<string, unknown>; ownEvidence?: string[] },
+): ParsedReport {
   const r = obj(raw);
   const violations: Violation[] = [];
+  const unverified: ParsedReport['unverified'] = [];
+  /** Angka di teks harus ada di bukti yang dirujuk; teks dengan angka karangan dibuang. */
+  const grounded = (text: string, ids: string[]) => {
+    const pool = poolFor(ctx.evidenceData, ids);
+    if (!pool) return true;
+    const bad = unsupportedNumbers(text, pool);
+    if (bad.length) unverified.push({ text, numbers: bad });
+    return bad.length === 0;
+  };
   const findings = arr(r.findings)
     .slice(0, LIMITS.findings)
     .map((f) => {
@@ -223,8 +259,13 @@ export function parseReport(raw: unknown, ctx: { allowed: ProposalAction[]; know
       const cid = str(o.campaignId, 40);
       return { text: str(o.text, 1000), campaignId: UUID_RE.test(cid) ? cid : null, evidence: validEvidence(o.evidence, ctx.known) };
     })
-    // Temuan tanpa bukti tidak diteruskan sebagai fakta.
-    .filter((f) => f.text && f.evidence.length);
+    // Temuan tanpa bukti, atau dengan angka yang tidak ada di bukti, tidak diteruskan sebagai fakta.
+    .filter((f) => f.text && f.evidence.length && grounded(f.text, f.evidence));
+  const lessons = arr(r.lessons)
+    .slice(0, LIMITS.lessons)
+    .map((l) => obj(l))
+    .map((l) => ({ text: str(l.text, 500), evidence: validEvidence(l.evidence, ctx.known) }))
+    .filter((l) => l.text.length >= 10 && l.evidence.length && grounded(l.text, l.evidence));
 
   const proposals: ProposalInput[] = [];
   for (const p of arr(r.proposals).slice(0, LIMITS.proposals)) {
@@ -245,6 +286,15 @@ export function parseReport(raw: unknown, ctx: { allowed: ProposalAction[]; know
     }
     if (reason.length < 10) {
       violations.push({ title, reason: 'Alasan tidak dijelaskan' });
+      continue;
+    }
+    const pool = poolFor(ctx.evidenceData, evidence);
+    // Parameter usulan (mis. ID zone di judul "Blokir zone 5552") sah disebut walau bukan metrik.
+    const zoneNum = Number(str(o.zoneId, 64));
+    if (pool && Number.isFinite(zoneNum)) pool.push(zoneNum);
+    const badNumbers = pool ? unsupportedNumbers(`${title} ${reason} ${str(o.expectedImpact, 500)}`, pool) : [];
+    if (badNumbers.length) {
+      violations.push({ title, reason: `Angka ${badNumbers.join(', ')} tidak ditemukan di data bukti yang dirujuk` });
       continue;
     }
     let payload: Record<string, unknown> = {};
@@ -282,12 +332,26 @@ export function parseReport(raw: unknown, ctx: { allowed: ProposalAction[]; know
     .filter((q) => q.question && ctx.positions.includes(q.to) && q.to !== ctx.self)
     .slice(0, LIMITS.questions);
 
-  return { summary: str(r.summary, 2000) || '(tanpa ringkasan)', findings, proposals, questions, violations };
+  let summary = str(r.summary, 2000) || '(tanpa ringkasan)';
+  // Ringkasan diperiksa terhadap semua bukti yang diambil agent ini; angka karangan ditandai jelas.
+  const ownPool = poolFor(ctx.evidenceData, ctx.ownEvidence ?? null);
+  if (ownPool) {
+    const bad = unsupportedNumbers(summary, ownPool);
+    if (bad.length) {
+      unverified.push({ text: summary, numbers: bad });
+      summary = `${summary}\n\n⚠ Angka tidak terverifikasi di data: ${bad.join(', ')}`;
+    }
+  }
+  return { summary, findings, proposals, questions, violations, lessons, unverified };
 }
 
-export function parseDiscussion(raw: unknown, known: Set<string>, questionRefs: Set<string>, proposalRefs: Set<string>) {
+export function parseDiscussion(raw: unknown, known: Set<string>, questionRefs: Set<string>, proposalRefs: Set<string>, evidenceData?: Map<string, unknown>) {
   const r = obj(raw);
-  return {
+  const ok = (text: string, ids: string[]) => {
+    const pool = poolFor(evidenceData, ids.length ? ids : ['__none__']);
+    return !pool || unsupportedNumbers(text, pool).length === 0;
+  };
+  const out = {
     answers: arr(r.answers)
       .slice(0, LIMITS.answers)
       .map((a) => obj(a))
@@ -304,6 +368,10 @@ export function parseDiscussion(raw: unknown, known: Set<string>, questionRefs: 
       }))
       .filter((a) => a.text && proposalRefs.has(a.proposalRef)),
   };
+  // Jawaban/tanggapan yang memuat angka tanpa bukti pendukung dibuang.
+  const answers = out.answers.filter((a) => ok(a.text, a.evidence));
+  const reviews = out.reviews.filter((a) => ok(a.text, a.evidence));
+  return { answers, reviews, dropped: out.answers.length - answers.length + out.reviews.length - reviews.length };
 }
 
 export function parsePlan(raw: unknown, available: Position[]) {
@@ -319,7 +387,10 @@ export function parsePlan(raw: unknown, available: Position[]) {
 
 export type Decision = 'FORWARD' | 'REJECT' | 'HOLD';
 
-export function parseSummary(raw: unknown, ctx: { proposalRefs: Set<string>; campaignIds: Set<string>; goalIds: Set<string>; known: Set<string> }) {
+export function parseSummary(
+  raw: unknown,
+  ctx: { proposalRefs: Set<string>; campaignIds: Set<string>; goalIds: Set<string>; known: Set<string>; evidenceData?: Map<string, unknown>; contextNumbers?: number[] },
+) {
   const r = obj(raw);
   const decisions = new Map<string, { decision: Decision; note: string }>();
   for (const d of arr(r.decisions).map((x) => obj(x))) {
@@ -327,8 +398,20 @@ export function parseSummary(raw: unknown, ctx: { proposalRefs: Set<string>; cam
     const decision = String(d.decision) as Decision;
     if (ctx.proposalRefs.has(ref) && ['FORWARD', 'REJECT', 'HOLD'].includes(decision) && !decisions.has(ref)) decisions.set(ref, { decision, note: str(d.note, 1000) });
   }
+  const summary = str(r.summary, 8000) || '(Kepala Tim AI tidak memberikan rangkuman)';
+  // Angka rangkuman harus ada di bukti sesi atau angka konteks (jumlah usulan, target goal).
+  const pool = poolFor(ctx.evidenceData, null);
+  if (pool) pool.push(...(ctx.contextNumbers ?? []));
+  const unverifiedNumbers = pool ? unsupportedNumbers(summary, pool) : [];
+  const teamLessons = arr(r.teamLessons)
+    .slice(0, 3)
+    .map((l) => obj(l))
+    .map((l) => ({ text: str(l.text, 500), evidence: validEvidence(l.evidence, ctx.known) }))
+    .filter((l) => l.text.length >= 10 && l.evidence.length && (!ctx.evidenceData || unsupportedNumbers(l.text, poolFor(ctx.evidenceData, l.evidence)!).length === 0));
   return {
-    summary: str(r.summary, 8000) || '(Kepala Tim AI tidak memberikan rangkuman)',
+    unverifiedNumbers,
+    teamLessons,
+    summary,
     campaignEvaluations: arr(r.campaignEvaluations)
       .slice(0, LIMITS.evaluations)
       .map((x) => obj(x))
@@ -390,4 +473,66 @@ export function localTime(instant: Date, tz: string): string {
 /** Rapat harian jatuh tempo bila jam lokal sudah melewati jam rapat dan rapat hari ini belum dibuat. */
 export function meetingDue(meetingTime: string, nowLocalTime: string, alreadyHeld: boolean): boolean {
   return !alreadyHeld && /^\d{2}:\d{2}$/.test(meetingTime) && nowLocalTime >= meetingTime;
+}
+
+// ───────────── anti-halusinasi: angka harus ada di data bukti ─────────────
+
+/** Angka yang bukan metrik (periode, urutan) tidak diperiksa. */
+const UNIT_SKIP = /^\s*(hari|hr|jam|minggu|bulan|tahun|menit|detik|days?|hours?|weeks?|months?|x\b|kali)/i;
+
+export interface NumberToken {
+  raw: string;
+  value: number;
+  decimals: number;
+}
+
+/** Ambil angka dari teks agent; abaikan ID bukti/usulan (E3, P1, Q2, T-5), tanggal, UUID, dan angka periode. */
+export function numbersIn(text: string): NumberToken[] {
+  const out: NumberToken[] = [];
+  const cleaned = text
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ' ')
+    .replace(/\b\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?\b/g, ' ')
+    .replace(/\b\d{1,2}[:.]\d{2}\s*(WIB|UTC)?\b(?=\s*(WIB|UTC|pagi|siang|malam))/gi, ' ');
+  const re = /(?<![A-Za-z_\-\d.,])-?\d+(?:[.,]\d+)*(?![\d])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cleaned))) {
+    const raw = m[0];
+    const prev = cleaned.slice(Math.max(0, m.index - 2), m.index);
+    if (/[A-Za-z]-?$/.test(prev) && !/\$$/.test(prev)) continue; // E3, T-5, v2
+    if (UNIT_SKIP.test(cleaned.slice(m.index + raw.length))) continue;
+    let norm = raw.replace(/^-/, '');
+    if (/^\d{1,3}([.,]\d{3})+$/.test(norm)) norm = norm.replace(/[.,]/g, '');
+    else norm = norm.replace(',', '.');
+    if ((norm.match(/\./g) ?? []).length > 1) continue;
+    const value = Number(norm) * (raw.startsWith('-') ? -1 : 1);
+    if (!Number.isFinite(value)) continue;
+    // 0 dan 1 terlalu umum (hitungan) untuk diperiksa secara bermakna.
+    if (Math.abs(value) <= 1 && !norm.includes('.')) continue;
+    out.push({ raw, value, decimals: norm.includes('.') ? norm.split('.')[1].length : 0 });
+  }
+  return out;
+}
+
+/** Semua angka di data bukti, termasuk konversi rasio↔persen. */
+export function evidenceNumbers(data: unknown, into: number[] = [], depth = 0): number[] {
+  if (depth > 8 || into.length > 20_000) return into;
+  if (typeof data === 'number' && Number.isFinite(data)) into.push(data, data * 100, data / 100);
+  else if (typeof data === 'string' && /^-?\d+(\.\d+)?$/.test(data.trim())) {
+    const n = Number(data);
+    into.push(n, n * 100, n / 100);
+  } else if (Array.isArray(data)) for (const x of data) evidenceNumbers(x, into, depth + 1);
+  else if (data && typeof data === 'object') for (const v of Object.values(data)) evidenceNumbers(v, into, depth + 1);
+  return into;
+}
+
+/** Cocok bila sama setelah pembulatan sesuai jumlah desimal yang ditulis (toleransi 0,5%). Tanda boleh berbeda (rugi $5 = profit -5). */
+export function numberSupported(n: NumberToken, pool: number[]): boolean {
+  const target = Math.abs(n.value);
+  const tol = Math.max(0.5 * 10 ** -n.decimals, target * 0.005);
+  return pool.some((v) => Math.abs(Math.abs(v) - target) <= tol);
+}
+
+/** Angka di teks yang tidak ditemukan di data bukti (kosong = lolos). */
+export function unsupportedNumbers(text: string, pool: number[]): string[] {
+  return [...new Set(numbersIn(text).filter((n) => !numberSupported(n, pool)).map((n) => n.raw))];
 }
