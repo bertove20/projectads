@@ -16,6 +16,18 @@ Roadmap & status fase: [read.md](read.md) bagian 17.6 dan [README.md](README.md)
 - **Transparansi**: owner membaca seluruh transkrip tim AI dan percakapan AI Assistant karyawan (setiap pembukaan tercatat di audit log; karyawan diberi tahu).
 - Izin baru `ai.supervise` dan `ai.approve` (default hanya Owner).
 
+### Ditambahkan (Phase 6 — ingatan, anti-halusinasi, Ruang Tim, kantor 3D, Telegram & Discord)
+- **Anti-halusinasi**: setiap angka yang ditulis karyawan AI dicocokkan dengan data bukti yang dirujuk; temuan dengan angka karangan dibuang, usulan ditolak, rangkuman ditandai.
+- **Ingatan kerja**: keputusan owner/Kepala Tim/sistem, hasil nyata eksekusi (profit/spend/konversi per hari sebelum vs sesudah, dihitung server), pelajaran ber-bukti, dan catatan owner dimuat ke sesi berikutnya agar tim belajar dari hasil sebelumnya. Owner dapat menambah, menyematkan, dan menghapus ingatan.
+- **Ruang Tim**: tampilan chat semua pekerjaan karyawan AI (per sesi dan per karyawan) + profil, statistik, dan ingatan; perintah ke Kepala Tim dari kolom chat.
+- **Kantor 3D**: robot karyawan AI per jabatan dengan animasi sesuai status nyata (siaga, ikut sesi, mengambil data, menulis, nonaktif, dihentikan); klik untuk melihat pekerjaannya.
+- **Telegram**: perintah dari grup/chat pribadi (`/perintah`, `/rapat`, `/status`, `/usulan`, `/stop`, `/lanjut`, `/hubungkan`) lewat long polling; hasil sesi dibalas ke grup.
+- **Discord**: channel Discord (webhook) untuk kabar tim & alert, slash command `/eaip` lewat Interactions Endpoint dengan verifikasi Ed25519, pendaftaran perintah dari dashboard.
+- Tautan akun chat ke anggota EAIP dengan kode sekali pakai; izin mengikuti role EAIP.
+- **Approval lewat chat**: kartu usulan dengan tombol Setujui/Tolak (Telegram) dan `/eaip usulan` (Discord), konfirmasi dua langkah, wajib izin `ai.approve`; revisi lewat `revisi <kode> <catatan>`; bisa dimatikan owner.
+- **Satu platform chat aktif**: owner memilih Telegram atau Discord; perintah, kabar, alert, dan approval hanya lewat platform itu.
+- Halaman: Ruang Tim, Telegram & Discord; tab Kantor 3D di Tim AI.
+
 ### Ditambahkan (Phase 5 — AI Workspace & Skill Library)
 - **Gateway OpenRouter** (server-side): API key diuji lalu disimpan terenkripsi, tidak pernah dikirim ke browser; model registry disinkron dari OpenRouter (harga, konteks, dukungan tool) dan hanya model yang diaktifkan admin yang bisa dipakai.
 - **AI Assistant per jabatan**: 8 agent (Strategy, Media Buyer, Analytics, Tracking, Fraud, Creative, CRO, Automation); model, fallback, temperature, maks token, budget harian/bulanan per jabatan dengan override per karyawan; budget organisasi & batas request.

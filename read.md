@@ -1731,3 +1731,27 @@ Owner menulis permintaan ke Kepala Tim AI → Kepala Tim AI membuat rencana dan 
 - Owner (izin `ai.supervise`) dapat membaca **seluruh** percakapan karyawan AI (termasuk data tool yang dipakai) dan percakapan AI Assistant karyawan manusia. Setiap pembukaan percakapan karyawan manusia dicatat di audit log, dan karyawan diberi tahu di layar bahwa percakapan AI dapat diaudit.
 - **Tombol darurat**: menghentikan seluruh aktivitas tim AI dan eksekusi seketika.
 - Budget harian tim AI dan batas per sesi rapat/perintah; pemakaian tercatat per agent.
+
+### 23.7 Anti-halusinasi (ditegakkan server)
+
+- Setiap angka yang ditulis karyawan AI (temuan, alasan usulan, dampak, pelajaran, jawaban diskusi) dicocokkan dengan angka di data bukti yang dirujuk (toleransi pembulatan; rasio ↔ persen; tanda rugi). Angka periode (“7 hari”), tanggal, ID, dan 0/1 tidak diperiksa.
+- Temuan/tanggapan dengan angka yang tidak ada di bukti dibuang dan dicatat; usulan seperti itu ditolak; ringkasan agent dan rangkuman Kepala Tim yang memuat angka tak terverifikasi diberi tanda peringatan untuk owner.
+
+### 23.8 Ingatan kerja (belajar dari hasil sebelumnya)
+
+- Jenis ingatan: **Hasil nyata** (dihitung server: rata-rata harian profit/spend/konversi campaign 7 hari sebelum vs sesudah eksekusi, dievaluasi ≥2 hari setelah eksekusi), **Keputusan** (owner/Kepala Tim/sistem menolak, menyetujui, meminta revisi + alasannya), **Pelajaran** (ditulis agent, wajib ber-bukti dan lolos cek angka), **Catatan owner** (manual, disematkan).
+- Ingatan dimuat ke prompt sesi berikutnya sebagai DATA (bukan instruksi); maksimal 200 per agent, yang disematkan selalu dimuat. Owner dapat menambah, menyematkan, dan menghapus ingatan.
+
+### 23.9 Ruang Tim & kantor 3D
+
+- Ruang Tim: tampilan chat seluruh pekerjaan karyawan AI (laporan, diskusi, pengambilan data + bukti, catatan sistem) per sesi, dapat difilter per karyawan; owner memberi perintah dari kolom chat (selalu lewat Kepala Tim AI).
+- Kantor 3D: setiap karyawan AI tampil sebagai robot di mejanya; animasi dan gelembung kerja mengikuti status nyata dari transkrip (siaga, ikut sesi, mengambil data, menulis, nonaktif, dihentikan).
+
+### 23.10 Perintah lewat Telegram & Discord (melengkapi bagian 5–6)
+
+- Telegram: long polling `getUpdates` di worker; perintah `/status /perintah /rapat /usulan /stop /lanjut /hubungkan` (format `/perintah@bot` di grup; privacy mode tidak perlu dimatikan). Hanya grup terdaftar atau chat pribadi.
+- Discord: slash command `/eaip …` lewat Interactions Endpoint (tanda tangan Ed25519 diverifikasi), kabar dikirim lewat webhook dengan `allowed_mentions` kosong.
+- Akun chat ditautkan ke anggota EAIP dengan kode sekali pakai (10 menit, disimpan sebagai hash); otorisasi memakai permission EAIP (`ai.supervise`), rate limit 10 perintah/menit, semua perintah masuk audit log.
+- Hasil sesi (rangkuman, jumlah usulan menunggu, tautan) dibalas ke chat asal dan dikirim ke channel yang mengaktifkan “kabar Tim AI”.
+- **Hanya satu platform chat aktif** per organisasi (Telegram atau Discord, dipilih owner). Perintah, kabar Tim AI, alert, dan persetujuan hanya berjalan di platform aktif; platform lain menolak/mengabaikan.
+- **Persetujuan lewat chat** (keputusan owner 2026-11-11, melengkapi bagian 5): tombol Setujui/Tolak pada kartu usulan (Telegram inline keyboard; Discord button lewat `/eaip usulan`). Syarat: akun tertaut, izin `ai.approve`, pengaturan “approval lewat chat” aktif, dan **konfirmasi kedua** sebelum eksekusi. Keputusan melewati jalur yang sama dengan Approval Center (status dicek ulang, eksekusi server, audit log `chat.approval`). Revisi: `revisi <kode> <catatan>`. Owner dapat mematikan approval lewat chat kapan saja.
